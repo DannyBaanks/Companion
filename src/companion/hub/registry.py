@@ -55,10 +55,10 @@ class CompanionRegistry:
     def _new_id(self, name: str) -> str:
         base = re.sub(r"[^a-z0-9]+", "-", name.casefold()).strip("-") or "companion"
         used = {record.companion_id for record in self.list()}
-        if base not in used:
+        if base not in used and not (self.runtimes_dir / base).exists():
             return base
         suffix = 2
-        while f"{base}-{suffix}" in used:
+        while f"{base}-{suffix}" in used or (self.runtimes_dir / f"{base}-{suffix}").exists():
             suffix += 1
         return f"{base}-{suffix}"
 

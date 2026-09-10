@@ -21,3 +21,17 @@ def test_registry_adds_collision_suffix_and_persists_version(tmp_path):
     assert second.companion_id == "my-friend-2"
     assert registry.path.exists()
     assert registry.path.read_text(encoding="utf-8").find('"version": 1') >= 0
+
+
+def test_registry_does_not_reuse_runtime_directory_after_registry_recovery(tmp_path):
+    path = tmp_path / "companions.json"
+    runtimes = tmp_path / "runtimes"
+    registry = CompanionRegistry(path, runtimes)
+    first = registry.create("Malbolge", tmp_path / "packs" / "one")
+    path.write_text("{broken", encoding="utf-8")
+
+    recovered = CompanionRegistry(path, runtimes)
+    second = recovered.create("Malbolge", tmp_path / "packs" / "two")
+
+    assert second.companion_id == "malbolge-2"
+    assert second.runtime_root != first.runtime_root
