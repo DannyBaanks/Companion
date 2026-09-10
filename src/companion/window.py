@@ -166,6 +166,20 @@ class DesktopWindow:
             self.image = None
         self.image_label = tk.Label(self.root, bg="magenta", fg="#a9ffcb", bd=0, highlightthickness=0)
         self.image_label.pack()
+        self._scale = 1.0
+        self.actions_open = False
+        if hasattr(self.root, "tk"):
+            self.action_button = tk.Button(
+                self.root, text="⋮", command=self.toggle_actions, width=2,
+                bg="#10151b", fg="#a9ffcb", activebackground="#26313b",
+                activeforeground="#ffffff", relief="flat", bd=0, cursor="hand2",
+            )
+            self.action_button.place(relx=1.0, rely=0.0, anchor="ne", x=-4, y=4)
+            self.actions_panel = tk.Frame(self.root, bg="#10151b", bd=1, relief="solid")
+            self._build_actions_panel()
+        else:
+            self.action_button = None
+            self.actions_panel = None
         self.bubble = tk.Label(
             self.root,
             text="",
@@ -205,6 +219,44 @@ class DesktopWindow:
         menu.add_separator()
         menu.add_command(label="Reminders...", command=self.open_reminders)
         return menu
+
+    def _build_actions_panel(self) -> None:
+        tk.Label(self.actions_panel, text="Actions", bg="#10151b", fg="#a9ffcb").pack(fill="x", padx=8, pady=(6, 3))
+        row = tk.Frame(self.actions_panel, bg="#10151b")
+        row.pack(fill="x", padx=6, pady=3)
+        for label, command in (("−", lambda: self.resize(-0.1)), ("+", lambda: self.resize(0.1)), ("×", self.close)):
+            tk.Button(row, text=label, command=command, width=3, bg="#202a33", fg="#ffffff", relief="flat").pack(side="left", padx=2)
+        tk.Button(self.actions_panel, text="State / position / pack…", command=self.open_context_menu, bg="#202a33", fg="#ffffff", relief="flat").pack(fill="x", padx=6, pady=(2, 6))
+
+    def toggle_actions(self) -> None:
+        if self.actions_panel is None:
+            return
+        self.actions_open = not self.actions_open
+        if self.actions_open:
+            self.actions_panel.place(relx=1.0, rely=0.0, anchor="ne", x=-4, y=34)
+        else:
+            self.actions_panel.place_forget()
+
+    def close(self) -> None:
+        self.root.destroy()
+
+    def open_context_menu(self) -> None:
+        self._show_controls(type("Event", (), {"x_root": self.root.winfo_rootx() + 8, "y_root": self.root.winfo_rooty() + 8})())
+
+    def resize(self, delta: float) -> None:
+        self._scale = max(0.6, min(1.8, self._scale + delta))
+        self._render_current_frame()
+
+    def _render_current_frame(self) -> None:
+        if not self.image:
+            return
+        frame = self.image.current
+        if self._scale > 1:
+            frame = frame.zoom(max(1, round(self._scale)))
+        elif self._scale < 1:
+            frame = frame.subsample(max(1, round(1 / self._scale)))
+        self._display_frame = frame
+        self.image_label.configure(image=frame)
 
     def _show_controls(self, event: tk.Event) -> None:
         try:
@@ -332,7 +384,7 @@ class DesktopWindow:
             except (OSError, ValueError, tk.TclError):
                 self._show_control_error(f"Could not load asset: {next_image_path.name}")
         if self.image:
-            self.image_label.configure(image=self.image.current)
+            self._render_current_frame()
             self.image.advance()
         else:
             self.image_label.configure(image="", text=f"{self.name}\n[{state['state']}]", padx=12, pady=12)

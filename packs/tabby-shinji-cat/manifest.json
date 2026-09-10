@@ -1,0 +1,12 @@
+{
+  "id": "tabby-shinji-cat",
+  "name": "Tabby Shinji Cat",
+  "animations": {
+    "idle": "idle.png",
+    "thinking": "thinking.png",
+    "working": "working.png",
+    "success": "success.png",
+    "error": "error.png",
+    "waiting": "waiting.png"
+  }
+}
