@@ -245,6 +245,17 @@ Inicia el Malbolgato con:
 
     companion --root .companion gui --pack packs/malbolge-cat
 
+También puedes guardar la selección del pack y las opciones de ventana en
+`companion.toml` y arrancarlo así:
+
+    companion --root .companion gui --config .\companion.toml
+
+La ruta `pack` dentro de ese archivo se resuelve relativa a la carpeta donde
+está `companion.toml`, no relativa a la carpeta desde la que ejecutas el
+comando. Por ejemplo, si el archivo está en la raíz del proyecto,
+`pack = "packs/malbolge-cat"` apunta a `packs/malbolge-cat` aunque abras la
+terminal desde otra carpeta.
+
 Arrastra con el botón izquierdo para moverla, presiona Esc para cerrar y usa
 clic derecho sobre el gato para abrir los controles compactos. Desde ahí puedes
 cambiar estado, posición, opacidad, visibilidad de mensajes y recargar el pack.

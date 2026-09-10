@@ -106,6 +106,18 @@ topmost = true
 opacity = 1.0
 ```
 
+Launch the GUI from a configuration file when you want the same setup every
+time:
+
+```powershell
+companion --root .companion gui --config .\companion.toml
+```
+
+The `pack` value is resolved relative to the directory containing
+`companion.toml`, not relative to the current shell directory. For example,
+with the file above saved at the project root, `pack = "packs/malbolge-cat"`
+loads `./packs/malbolge-cat` even if the command is launched from elsewhere.
+
 Launch the desktop window with an optional GIF or PNG:
 
 ```powershell
