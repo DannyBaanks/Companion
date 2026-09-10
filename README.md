@@ -198,10 +198,10 @@ companion websocket --port 8765
 Requires `pip install 'open-agent-companion[websocket]'`. Only loopback
 hosts are permitted — no remote connections.
 
-### OpenCode / OpenISy integration
+### OpenCode integration
 
-Two TypeScript plugins translate OpenCode session events into companion
-state changes. They write to the same `inbox.jsonl` format.
+The TypeScript plugin translates OpenCode session events into companion state
+changes. It writes to the same `inbox.jsonl` format.
 
 **OpenCode plugin** (for published OpenCode):
 
@@ -214,18 +214,7 @@ export default {
 }
 ```
 
-**OpenISy TUI plugin** (for local OpenISy):
-
-```typescript
-import { CompanionTuiPlugin } from "companion/integrations/openisy-tui-plugin"
-
-export default {
-  name: "companion-tui",
-  plugins: [CompanionTuiPlugin],
-}
-```
-
-Both emit `state` and `say` events on `session.idle`, `session.error`,
+The plugin emits `state` and `say` events on `session.idle`, `session.error`,
 and `question.asked`. The companion shows a message and updates its state
 automatically — no AI, no cloud, no accounts.
 
