@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import tkinter as tk
+from tkinter import filedialog
 import time
 
 from .paths import platform_name
@@ -53,11 +54,46 @@ class AnimatedAsset:
         except OSError:
             return []
         durations: list[float] = []
-        # A GCE stores its delay as hundredths of a second, little-endian,
-        # between the packed field and transparency index.
-        for match in re.finditer(rb"\x21\xf9\x04(.)(.)(.)", data, flags=re.DOTALL):
-            delay = match.group(2)[0] | (match.group(3)[0] << 8)
-            durations.append(delay / 100.0)
+        if len(data) < 13 or data[:3] != b"GIF":
+            return durations
+        packed = data[10]
+        offset = 13 + (3 * (2 ** ((packed & 7) + 1)) if packed & 0x80 else 0)
+        pending = 0.1
+        while offset < len(data):
+            marker = data[offset]; offset += 1
+            if marker == 0x3B: break
+            if marker == 0x21:
+                if offset >= len(data): break
+                label = data[offset]; offset += 1
+                if label == 0xF9 and offset + 5 <= len(data) and data[offset] == 4:
+                    delay = data[offset + 2] | (data[offset + 3] << 8)
+                    pending = delay / 100.0 or 0.1
+                    offset += 5
+                else:
+                    while offset < len(data):
+                        size = data[offset]; offset += 1
+                        if size == 0: break
+                        offset += size
+            elif marker == 0x2C:
+                if offset + 9 > len(data): break
+                flags = data[offset + 8]; offset += 9
+                if flags & 0x80: offset += 3 * (2 ** ((flags & 7) + 1))
+                if offset >= len(data): break
+                offset += 1
+                while offset < len(data):
+                    size = data[offset]; offset += 1
+                    if size == 0: break
+                    offset += size
+                durations.append(pending)
+                pending = 0.1
+            else:
+                break
+        # Keep compatibility with tiny synthetic fixtures that contain only
+        # GCE records; real GIFs are handled by the block-aware parser above.
+        if not durations:
+            for match in re.finditer(rb"\x21\xf9\x04.(.)(.)", data, flags=re.DOTALL):
+                delay = match.group(1)[0] | (match.group(2)[0] << 8)
+                durations.append(delay / 100.0 or 0.1)
         return durations
 
     @property
@@ -144,6 +180,7 @@ class DesktopWindow:
         self.messages_var = tk.BooleanVar(value=show_messages)
         self.context_menu = self._build_context_menu()
         self._drag_origin: tuple[int, int] | None = None
+        self._dragged = False
         self._refresh()
 
     def _build_context_menu(self) -> tk.Menu:
@@ -164,6 +201,7 @@ class DesktopWindow:
         menu.add_cascade(label="Opacity", menu=opacity_menu)
         menu.add_checkbutton(label="Show messages", variable=self.messages_var, command=self.toggle_messages)
         menu.add_command(label="Reload pack", command=self.reload_pack)
+        menu.add_command(label="Choose pack...", command=self.choose_pack)
         menu.add_separator()
         menu.add_command(label="Reminders...", command=self.open_reminders)
         return menu
@@ -235,8 +273,25 @@ class DesktopWindow:
         self._show_control_error("")
         return True
 
+    def choose_pack(self) -> bool:
+        selected = filedialog.askdirectory(parent=self.root, title="Choose companion pack")
+        if not selected:
+            return False
+        try:
+            pack = AssetPack.load(Path(selected))
+            image_path = pack.animation_for(state=self.runtime.state["state"], mood=self.runtime.state.get("mood"))
+            image = AnimatedAsset(image_path)
+        except (OSError, ValueError, PackError, tk.TclError) as exc:
+            self._show_control_error(str(exc))
+            return False
+        self.pack, self.pack_name, self.image_path, self.image = pack, pack.name, image_path, image
+        self._show_control_error("")
+        return True
+
     def _drag_start(self, event: tk.Event) -> None:
         self._drag_origin = (event.x_root - self.root.winfo_x(), event.y_root - self.root.winfo_y())
+        self._dragged = True
+        self._publish_events(("move", "free"))
 
     def _drag_move(self, event: tk.Event) -> None:
         if self._drag_origin:
@@ -271,16 +326,19 @@ class DesktopWindow:
         if next_image_path is not None and next_image_path != self.image_path and next_image_path.exists():
             self.image_path = next_image_path
             try:
-                self.image = AnimatedAsset(next_image_path)
+                candidate = AnimatedAsset(next_image_path)
+                self.image = candidate
+                self.image_path = next_image_path
             except (OSError, ValueError, tk.TclError):
-                self.image = None
+                self._show_control_error(f"Could not load asset: {next_image_path.name}")
         if self.image:
             self.image_label.configure(image=self.image.current)
             self.image.advance()
         else:
             self.image_label.configure(image="", text=f"{self.name}\n[{state['state']}]", padx=12, pady=12)
         self.root.withdraw() if not state["visible"] else self.root.deiconify()
-        self._place(state["position"])
+        if not self._dragged:
+            self._place(state["position"])
         message = state.get("message")
         if self.show_messages and state["visible"] and message and message.get("text"):
             self.bubble.configure(text=message["text"])

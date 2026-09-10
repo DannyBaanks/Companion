@@ -251,6 +251,9 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         if config:
             runtime.state["position"] = config.position
+        # An explicit GUI launch is an interactive request; do not leave the
+        # freshly-created window withdrawn until a separate summon event.
+        runtime.state["visible"] = True
         launch(
             runtime,
             asset=args.asset,
