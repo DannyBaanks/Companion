@@ -1,0 +1,12 @@
+{
+  "id": "malbolge-cat",
+  "name": "Malbolge Cat",
+  "animations": {
+    "idle": "idle.gif",
+    "thinking": "thinking.gif",
+    "working": "working.gif",
+    "success": "success.gif",
+    "error": "error.gif",
+    "waiting": "waiting.gif"
+  }
+}
