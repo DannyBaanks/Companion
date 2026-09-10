@@ -156,6 +156,7 @@ class DesktopWindow:
         self.root.bind("<B1-Motion>", self._drag_move)
         self.root.bind("<Escape>", lambda _event: self.root.destroy())
         self.root.bind("<Button-3>", self._show_controls)
+        self.root.bind("<Double-Button-1>", lambda _event: self.toggle_actions())
 
         self.pack = pack
         self.pack_name = pack_name or (pack.name if pack else None)
@@ -221,7 +222,10 @@ class DesktopWindow:
         return menu
 
     def _build_actions_panel(self) -> None:
-        tk.Label(self.actions_panel, text="Actions", bg="#10151b", fg="#a9ffcb").pack(fill="x", padx=8, pady=(6, 3))
+        header = tk.Frame(self.actions_panel, bg="#10151b")
+        header.pack(fill="x", padx=6, pady=(4, 2))
+        tk.Label(header, text="Actions", bg="#10151b", fg="#a9ffcb").pack(side="left", padx=2)
+        tk.Button(header, text="_", command=self.toggle_actions, width=2, bg="#202a33", fg="#ffffff", relief="flat").pack(side="right")
         row = tk.Frame(self.actions_panel, bg="#10151b")
         row.pack(fill="x", padx=6, pady=3)
         for label, command in (("−", lambda: self.resize(-0.1)), ("+", lambda: self.resize(0.1)), ("×", self.close)):
