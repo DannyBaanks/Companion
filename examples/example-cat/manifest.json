@@ -1,0 +1,8 @@
+{
+  "id": "example-cat",
+  "name": "Example Cat",
+  "animations": {
+    "idle": "idle.png",
+    "success": "success.png"
+  }
+}

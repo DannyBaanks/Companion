@@ -1,0 +1,213 @@
+"""Small Tk window that renders the runtime state on Windows and other Tk hosts."""
+
+from __future__ import annotations
+
+from pathlib import Path
+import tkinter as tk
+
+from .paths import platform_name
+from .protocol import POSITIONS
+from .pack import AssetPack
+from .runtime import Runtime
+from .scheduled import LocalScheduler, ReminderError, ReminderStore
+
+
+class AnimatedAsset:
+    def __init__(self, path: Path):
+        self.path = path
+        self.frames: list[tk.PhotoImage] = []
+        self.index = 0
+        self._load()
+
+    def _load(self) -> None:
+        if self.path.suffix.lower() == ".gif":
+            index = 0
+            while True:
+                try:
+                    self.frames.append(tk.PhotoImage(file=str(self.path), format=f"gif -index {index}"))
+                except tk.TclError:
+                    break
+                index += 1
+        elif self.path.exists():
+            self.frames.append(tk.PhotoImage(file=str(self.path)))
+        if not self.frames:
+            raise ValueError(f"could not load image asset: {self.path}")
+
+    @property
+    def current(self) -> tk.PhotoImage:
+        return self.frames[self.index]
+
+    def advance(self) -> None:
+        if len(self.frames) > 1:
+            self.index = (self.index + 1) % len(self.frames)
+
+
+class DesktopWindow:
+    def __init__(self, runtime: Runtime, *, asset: Path | None = None, pack: AssetPack | None = None, name: str = "Companion", topmost: bool = True, opacity: float = 1.0):
+        self.runtime = runtime
+        self.name = name
+        self.reminders = ReminderStore(runtime.root / "reminders.json")
+        self.scheduler = LocalScheduler(self.reminders, runtime.inbox)
+        self.reminder_panel: ReminderPanel | None = None
+        self.root = tk.Tk()
+        self.root.title(name)
+        self.root.overrideredirect(True)
+        self.root.attributes("-topmost", topmost)
+        self.root.configure(bg="magenta")
+        if platform_name() == "windows":
+            try:
+                self.root.wm_attributes("-transparentcolor", "magenta")
+            except tk.TclError:
+                self.root.attributes("-alpha", opacity)
+        else:
+            # Linux/macOS Tk rarely supports -transparentcolor; use alpha.
+            try:
+                self.root.attributes("-alpha", opacity)
+            except tk.TclError:
+                pass
+        self.root.bind("<ButtonPress-1>", self._drag_start)
+        self.root.bind("<B1-Motion>", self._drag_move)
+        self.root.bind("<Escape>", lambda _event: self.root.destroy())
+        self.root.bind("<Button-3>", lambda _event: self.open_reminders())
+
+        self.pack = pack
+        self.image_path = asset or (pack.animation_for(state="idle") if pack else None)
+        try:
+            self.image = AnimatedAsset(self.image_path) if self.image_path else None
+        except (OSError, ValueError, tk.TclError):
+            self.image = None
+        self.image_label = tk.Label(self.root, bg="magenta", fg="#a9ffcb", bd=0, highlightthickness=0)
+        self.image_label.pack()
+        self.image_label.bind("<Button-3>", lambda _event: self.open_reminders())
+        self.bubble = tk.Label(
+            self.root,
+            text="",
+            bg="#10151b",
+            fg="#a9ffcb",
+            padx=8,
+            pady=5,
+            wraplength=260,
+            justify="left",
+        )
+        self._drag_origin: tuple[int, int] | None = None
+        self._refresh()
+
+    def _drag_start(self, event: tk.Event) -> None:
+        self._drag_origin = (event.x_root - self.root.winfo_x(), event.y_root - self.root.winfo_y())
+
+    def _drag_move(self, event: tk.Event) -> None:
+        if self._drag_origin:
+            x = event.x_root - self._drag_origin[0]
+            y = event.y_root - self._drag_origin[1]
+            self.root.geometry(f"+{x}+{y}")
+
+    def _place(self, position: str) -> None:
+        if position == "free":
+            return
+        width = self.root.winfo_reqwidth()
+        height = self.root.winfo_reqheight()
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        margin = 24
+        coordinates = {
+            "top-left": (margin, margin),
+            "top-right": (screen_width - width - margin, margin),
+            "bottom-left": (margin, screen_height - height - margin),
+            "bottom-right": (screen_width - width - margin, screen_height - height - margin),
+            "dock": (screen_width // 2 - width // 2, screen_height - height - margin),
+        }
+        if position in POSITIONS:
+            x, y = coordinates[position]
+            self.root.geometry(f"+{max(0, x)}+{max(0, y)}")
+
+    def _refresh(self) -> None:
+        self.scheduler.tick()
+        self.runtime.process_once()
+        state = self.runtime.state
+        next_image_path = self.pack.animation_for(state=state["state"], mood=state.get("mood")) if self.pack else self.image_path
+        if next_image_path is not None and next_image_path != self.image_path and next_image_path.exists():
+            self.image_path = next_image_path
+            try:
+                self.image = AnimatedAsset(next_image_path)
+            except (OSError, ValueError, tk.TclError):
+                self.image = None
+        if self.image:
+            self.image_label.configure(image=self.image.current)
+            self.image.advance()
+        else:
+            self.image_label.configure(image="", text=f"{self.name}\n[{state['state']}]", padx=12, pady=12)
+        self.root.withdraw() if not state["visible"] else self.root.deiconify()
+        self._place(state["position"])
+        message = state.get("message")
+        if state["visible"] and message and message.get("text"):
+            self.bubble.configure(text=message["text"])
+            if not self.bubble.winfo_ismapped():
+                self.bubble.pack()
+        elif self.bubble.winfo_ismapped():
+            self.bubble.pack_forget()
+        self.root.after(100, self._refresh)
+
+    def show(self) -> None:
+        self.root.mainloop()
+
+    def open_reminders(self) -> None:
+        if self.reminder_panel and self.reminder_panel.root.winfo_exists():
+            self.reminder_panel.root.lift()
+            return
+        self.reminder_panel = ReminderPanel(self.root, self.reminders)
+
+
+def launch(runtime: Runtime, *, asset: Path | None = None, pack: AssetPack | None = None, name: str = "Companion", topmost: bool = True, opacity: float = 1.0) -> None:
+    DesktopWindow(runtime, asset=asset, pack=pack, name=name, topmost=topmost, opacity=opacity).show()
+
+
+class ReminderPanel:
+    """Small local reminder editor; it only writes ScheduledEvent records."""
+
+    def __init__(self, parent: tk.Tk, store: ReminderStore):
+        self.store = store
+        self.root = tk.Toplevel(parent)
+        self.root.title("Reminder")
+        self.root.resizable(False, False)
+        self.root.attributes("-topmost", True)
+        self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
+        frame = tk.Frame(self.root, padx=12, pady=12)
+        frame.pack()
+        tk.Label(frame, text="Message:").grid(row=0, column=0, sticky="w")
+        self.message = tk.Entry(frame, width=30)
+        self.message.grid(row=0, column=1, columnspan=2, pady=3)
+        tk.Label(frame, text="Time:").grid(row=1, column=0, sticky="w")
+        self.when = tk.Entry(frame, width=10)
+        self.when.insert(0, "19:30")
+        self.when.grid(row=1, column=1, sticky="w", pady=3)
+        tk.Button(frame, text="Save reminder", command=self.save).grid(row=2, column=0, columnspan=3, pady=7)
+        self.error = tk.Label(frame, text="", fg="#a00000")
+        self.error.grid(row=3, column=0, columnspan=3)
+        self.listbox = tk.Listbox(frame, width=52, height=6)
+        self.listbox.grid(row=4, column=0, columnspan=2, pady=(8, 0))
+        tk.Button(frame, text="Cancel selected", command=self.cancel_selected).grid(row=4, column=2, padx=(8, 0), sticky="n")
+        self.refresh()
+
+    def save(self) -> None:
+        try:
+            self.store.create(due_at=self.when.get(), message=self.message.get())
+        except ReminderError as exc:
+            self.error.configure(text=str(exc))
+            return
+        self.error.configure(text="")
+        self.message.delete(0, tk.END)
+        self.refresh()
+
+    def refresh(self) -> None:
+        self.listbox.delete(0, tk.END)
+        for reminder in self.store.list(status="pending"):
+            due = reminder.due_at.replace("T", " ")[:16]
+            self.listbox.insert(tk.END, f"{due}  {reminder.message}")
+
+    def cancel_selected(self) -> None:
+        selection = self.listbox.curselection()
+        if not selection:
+            return
+        pending = self.store.list(status="pending")
+        self.store.cancel(pending[selection[0]].id)
+        self.refresh()

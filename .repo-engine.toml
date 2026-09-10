@@ -1,0 +1,5 @@
+[repo_engine]
+template = "serious"
+phase = "building"
+visual_language = "technical brief"
+required_artifacts = ["README.md", "LICENSE", ".github/workflows"]
