@@ -42,7 +42,7 @@ def test_gui_launch_applies_optional_config_fields(monkeypatch, tmp_path: Path):
         json.dumps(
             {
                 "companion": {"name": "Malbolgato", "pack_name": "malbolge-cat"},
-                "window": {"show_messages": False},
+                "window": {"show_messages": False, "opacity": 0.6},
             }
         ),
         encoding="utf-8",
@@ -57,3 +57,4 @@ def test_gui_launch_applies_optional_config_fields(monkeypatch, tmp_path: Path):
     assert cli.main(["--root", str(tmp_path / "runtime"), "gui", "--config", str(config_path)]) == 0
     assert launched["show_messages"] is False
     assert launched["pack_name"] == "malbolge-cat"
+    assert launched["opacity"] == 0.6

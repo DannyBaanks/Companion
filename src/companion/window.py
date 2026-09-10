@@ -111,13 +111,11 @@ class DesktopWindow:
             try:
                 self.root.wm_attributes("-transparentcolor", "magenta")
             except tk.TclError:
-                self.root.attributes("-alpha", self.opacity)
-        else:
-            # Linux/macOS Tk rarely supports -transparentcolor; use alpha.
-            try:
-                self.root.attributes("-alpha", self.opacity)
-            except tk.TclError:
                 pass
+        try:
+            self.root.attributes("-alpha", self.opacity)
+        except tk.TclError:
+            pass
         self.root.bind("<ButtonPress-1>", self._drag_start)
         self.root.bind("<B1-Motion>", self._drag_move)
         self.root.bind("<Escape>", lambda _event: self.root.destroy())
@@ -132,7 +130,6 @@ class DesktopWindow:
             self.image = None
         self.image_label = tk.Label(self.root, bg="magenta", fg="#a9ffcb", bd=0, highlightthickness=0)
         self.image_label.pack()
-        self.image_label.bind("<Button-3>", self._show_controls)
         self.bubble = tk.Label(
             self.root,
             text="",

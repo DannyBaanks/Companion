@@ -71,7 +71,8 @@ class FakeRoot:
 
 
 class FakeLabel:
-    def __init__(self, _parent, **values):
+    def __init__(self, parent, **values):
+        self.parent = parent
         self.values = values
         self.bindings = {}
         self.mapped = False
@@ -84,6 +85,11 @@ class FakeLabel:
 
     def bind(self, sequence, callback):
         self.bindings[sequence] = callback
+
+    def dispatch(self, sequence, event):
+        result = self.bindings[sequence](event) if sequence in self.bindings else None
+        if result != "break" and sequence in self.parent.bindings:
+            self.parent.bindings[sequence](event)
 
     def configure(self, **values):
         self.values.update(values)
@@ -108,6 +114,7 @@ class FakeMenu:
         self.tearoff = tearoff
         self.entries = []
         self.popup = None
+        self.popup_calls = []
         self.released = False
 
     def add_command(self, **values):
@@ -124,6 +131,7 @@ class FakeMenu:
 
     def tk_popup(self, x, y):
         self.popup = (x, y)
+        self.popup_calls.append((x, y))
 
     def grab_release(self):
         self.released = True
@@ -226,17 +234,32 @@ def test_static_image_asset_has_one_frame(monkeypatch, tmp_path):
     assert asset.index == 0
 
 
-def test_context_controls_preserve_drag_escape_and_right_click_bindings(monkeypatch, tmp_path):
+def test_context_controls_preserve_drag_escape_and_single_right_click_behavior(monkeypatch, tmp_path):
     window = make_window(monkeypatch, tmp_path)
 
     assert {"<ButtonPress-1>", "<B1-Motion>", "<Escape>", "<Button-3>"} <= window.root.bindings.keys()
+    drag_start = type("Event", (), {"x_root": 25, "y_root": 50})()
+    drag_move = type("Event", (), {"x_root": 100, "y_root": 120})()
+    window.root.bindings["<ButtonPress-1>"](drag_start)
+    window.root.bindings["<B1-Motion>"](drag_move)
+    assert window.root.geometry_calls[-1] == "+85+90"
+
     window.root.bindings["<Escape>"](object())
     assert window.root.destroyed is True
 
     event = type("Event", (), {"x_root": 45, "y_root": 67})()
-    window.image_label.bindings["<Button-3>"](event)
-    assert window.context_menu.popup == (45, 67)
+    window.image_label.dispatch("<Button-3>", event)
+    assert window.context_menu.popup_calls == [(45, 67)]
     assert window.context_menu.released is True
+
+
+def test_constructor_applies_opacity_when_windows_transparent_color_succeeds(monkeypatch, tmp_path):
+    monkeypatch.setattr("companion.window.platform_name", lambda: "windows")
+
+    window = make_window(monkeypatch, tmp_path, opacity=0.6)
+
+    assert ("-transparentcolor", "magenta") in window.root.attribute_calls
+    assert ("-alpha", 0.6) in window.root.attribute_calls
 
 
 def test_context_menu_exposes_all_runtime_states_and_positions(monkeypatch, tmp_path):
