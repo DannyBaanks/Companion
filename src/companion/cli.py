@@ -15,6 +15,7 @@ from .logs import emit as log_emit, read_tail
 from .pack import AssetPack, PackError
 from .paths import default_data_dir, discover_config, platform_name, resolve_root
 from .queue import append_jsonl
+from .render_request import RenderRequestError, load_render_request
 from .runtime import Runtime
 from .scheduled import LocalScheduler, ReminderError, ReminderStore, local_now, parse_in_duration
 from .window import launch
@@ -92,6 +93,10 @@ def build_parser() -> argparse.ArgumentParser:
     pack_sub = pack.add_subparsers(dest="pack_command", required=True)
     validate = pack_sub.add_parser("validate")
     validate.add_argument("path", type=Path)
+    render_request = sub.add_parser("render-request", help="validate a renderer request document")
+    render_request_sub = render_request.add_subparsers(dest="render_request_command", required=True)
+    render_request_validate = render_request_sub.add_parser("validate")
+    render_request_validate.add_argument("path", type=Path)
     sub.add_parser("hook", help="forward canonical JSONL events from stdin")
     return parser
 
@@ -105,6 +110,14 @@ def main(argv: list[str] | None = None) -> int:
         build_parser().print_usage(sys.stderr)
         print("error: a command is required (try --help)", file=sys.stderr)
         return 2
+    if args.command == "render-request":
+        try:
+            request = load_render_request(args.path)
+        except RenderRequestError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(request, ensure_ascii=True))
+        return 0
     root = _root(args.root)
     runtime = Runtime(root, companion_id=args.companion_id)
     reminder_store = ReminderStore(root / "reminders.json")
