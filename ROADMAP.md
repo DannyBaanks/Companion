@@ -133,10 +133,27 @@ package `open-agent-companion`. See `CHANGELOG.md`, `LICENSE`,
   connect an existing agent, or use pets without an agent.
 - [ ] Add portable declarative Companion Recipes with the lifecycle
   `detect -> propose -> confirm -> execute -> verify -> receipt`.
+- [ ] Define `cap.doctor` as a first-class, provider-agnostic diagnostic
+  capability. Doctor inspects and reports; it never installs by itself.
+- [ ] Standardize Doctor outcomes as `READY`, `NEEDS_ACTION`, `BLOCKED`, or
+  `UNKNOWN`, without false-green success states.
 - [ ] Detect common local prerequisites such as Git, Python, Node, and
   available CLI/TUI agents.
+- [ ] Check platform, CPU architecture, PATH, permissions, disk space, ports,
+  versions, conflicts, existing installations, upgrade paths, and rollback
+  feasibility when relevant to a recipe.
+- [ ] Generate a declarative installation plan rather than free-form shell:
+  official source, package/artifact, version, architecture, checksum or
+  signature, destination, permissions, verification, and rollback metadata.
+- [ ] Display a `License & Source Review` with detected license, official source,
+  terms link, redistribution/commercial-use summary, notices, and an explicit
+  `UNKNOWN`/user-review state for ambiguity. It must not claim universal legal
+  approval.
 - [ ] Never execute installation or configuration commands before displaying
   the exact action and receiving explicit confirmation.
+- [ ] Keep proposal, verification, authority, and execution separate:
+  recipes propose, Doctor verifies, the user authorizes, and a constrained
+  installer performs only declared operations.
 - [ ] Ship one supported coding-agent recipe plus a generic
   `connect existing CLI/TUI` recipe.
 - [ ] Guide the user with a bundled default companion instead of technical
@@ -144,12 +161,19 @@ package `open-agent-companion`. See `CHANGELOG.md`, `LICENSE`,
 - [ ] Verify the complete path: agent launches, adapter responds, events reach
   the runtime, and the companion renders the resulting state/message.
 - [ ] Produce a readable installation receipt and actionable recovery steps.
+- [ ] Run Doctor again after execution and require all mandatory checks to pass
+  before reporting the companion ready.
 
 ### M13. Recipe ecosystem and full companion creation
 
 - [ ] Add recipe packs for more CLI/TUI agents, local models, and API-backed
   providers without coupling the Companion core to any provider.
 - [ ] Define capability contracts for chat, notifications, status, and actions.
+- [ ] Allow providers/runtimes to contribute Doctor hooks while returning the
+  same stable diagnostic contract (`opencode.doctor`, `ollama.doctor`, generic
+  CLI/TUI Doctor, and future adapters).
+- [ ] Add provenance policies for official sources, package registries,
+  checksums/signatures, version pinning, and license metadata.
 - [ ] Combine agent adapter, capabilities, visual pack, and behavior/personality
   into one portable companion definition.
 - [ ] Add safe rollback/uninstall hooks for recipe-owned changes.
