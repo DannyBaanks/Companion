@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import tkinter as tk
+import time
 
 from .paths import platform_name
 from .protocol import POSITIONS
@@ -13,14 +15,18 @@ from .scheduled import LocalScheduler, ReminderError, ReminderStore
 
 
 class AnimatedAsset:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, clock=time.monotonic):
         self.path = path
+        self.clock = clock
         self.frames: list[tk.PhotoImage] = []
+        self.durations: list[float] = []
         self.index = 0
+        self._last_time = self.clock()
         self._load()
 
     def _load(self) -> None:
         if self.path.suffix.lower() == ".gif":
+            metadata_durations = self._gif_durations()
             index = 0
             while True:
                 try:
@@ -28,18 +34,51 @@ class AnimatedAsset:
                 except tk.TclError:
                     break
                 index += 1
+            default_duration = 0.1
+            self.durations = [
+                duration if duration > 0 else default_duration
+                for duration in (metadata_durations[: len(self.frames)] + [default_duration] * len(self.frames))[: len(self.frames)]
+            ]
         elif self.path.exists():
             self.frames.append(tk.PhotoImage(file=str(self.path)))
+            self.durations = [float("inf")]
         if not self.frames:
             raise ValueError(f"could not load image asset: {self.path}")
+
+    def _gif_durations(self) -> list[float]:
+        """Read GIF Graphic Control Extension delays, tolerating missing metadata."""
+        try:
+            data = self.path.read_bytes()
+        except OSError:
+            return []
+        durations: list[float] = []
+        # A GCE stores its delay as hundredths of a second, little-endian,
+        # between the packed field and transparency index.
+        for match in re.finditer(rb"\x21\xf9\x04(.)(.)(.)", data, flags=re.DOTALL):
+            delay = match.group(2)[0] | (match.group(3)[0] << 8)
+            durations.append(delay / 100.0)
+        return durations
 
     @property
     def current(self) -> tk.PhotoImage:
         return self.frames[self.index]
 
-    def advance(self) -> None:
-        if len(self.frames) > 1:
+    def advance(self, now=None) -> None:
+        if len(self.frames) <= 1:
+            return
+        current_time = self.clock() if now is None else now
+        if current_time < self._last_time:
+            self._last_time = current_time
+            return
+        elapsed = current_time - self._last_time
+        while elapsed + 1e-9 >= self.durations[self.index]:
+            elapsed -= self.durations[self.index]
             self.index = (self.index + 1) % len(self.frames)
+        self._last_time = current_time - elapsed
+
+    def reset(self) -> None:
+        self.index = 0
+        self._last_time = self.clock()
 
 
 class DesktopWindow:
