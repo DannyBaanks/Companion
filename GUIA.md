@@ -225,3 +225,32 @@ tienen pruebas y demo (`py examples/demo_e2e.py`).
    `state.json.corrupt` y se sigue con defaults; `doctor` lo reporta.
 7. El `message` de `status` puede ser el recordatorio y no tu último `say`
    si ambos dispararon en el mismo `run --once` (cola por prioridad).
+
+## Pack del Malbolgato y solicitudes de render
+
+Valida el pack incluido y el contrato de personalización:
+
+    companion --root .companion pack validate packs/malbolge-cat
+    companion --root .companion render-request validate examples/render_request.json
+
+La solicitud requiere name y style. También acepta palette, los estados
+conocidos (idle, thinking, working, success, error, waiting) y
+output.cell_size como un par de enteros positivos. Los campos adicionales se
+conservan para que cada renderer pueda extenderla; Companion no hace llamadas
+de red ni intenta generar imágenes.
+
+## Controles de la ventana
+
+Inicia el Malbolgato con:
+
+    companion --root .companion gui --pack packs/malbolge-cat
+
+Arrastra con el botón izquierdo para moverla, presiona Esc para cerrar y usa
+clic derecho sobre el gato para abrir los controles compactos. Desde ahí puedes
+cambiar estado, posición, opacidad, visibilidad de mensajes y recargar el pack.
+La recarga no modifica los archivos del pack.
+
+Si falta un estado opcional, el renderer usa idle. Si la ventana sigue en idle,
+revisa que --pack apunte a la carpeta que contiene manifest.json y vuelve a
+validar el pack. Los errores de ruta, manifest o asset se muestran antes de
+abrir la ventana.

@@ -5,6 +5,7 @@ import pytest
 
 from companion.config import load_config
 from companion.pack import AssetPack, PackError
+from companion.render_request import load_render_request
 
 
 def _pack(tmp_path: Path) -> Path:
@@ -44,3 +45,20 @@ def test_toml_config_resolves_pack_relative_to_config(tmp_path: Path):
     assert config.name == "Terra"
     assert config.pack == pack.resolve()
     assert config.position == "dock"
+
+
+def test_checked_in_malbolgato_request_and_pack_validate():
+    project_root = Path(__file__).resolve().parents[1]
+    request = load_render_request(project_root / "examples" / "render_request.json")
+    pack = AssetPack.load(project_root / "packs" / "malbolge-cat")
+
+    assert request["name"] == "Malbolgato"
+    assert set(request["states"]) == set(pack.animations)
+    assert set(pack.animations) == {
+        "idle",
+        "thinking",
+        "working",
+        "success",
+        "error",
+        "waiting",
+    }

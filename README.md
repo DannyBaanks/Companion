@@ -78,6 +78,19 @@ companion pack validate .\assets\example-cat
 companion --root .companion gui --pack .\assets\example-cat
 ```
 
+The included Malbolgato pack and renderer request are a complete smoke test:
+
+    companion pack validate .\packs\malbolge-cat
+    companion render-request validate .\examples\render_request.json
+    companion --root .companion gui --pack .\packs\malbolge-cat
+
+examples/render_request.json is a renderer-facing customization contract.
+name and style are required; palette, states, output.cell_size, and
+renderer-specific fields are optional. Companion validates the supported
+fields and prints normalized JSON; it does not render or make network calls.
+Missing optional animation states fall back to idle. A missing asset or an
+invalid manifest is reported by pack validate before the GUI opens.
+
 The renderer chooses a mood-specific asset first, then the current state, then
 `idle`. Missing optional states therefore do not break a pack. Configuration
 can select the pack and window settings:
@@ -100,6 +113,10 @@ companion --root .companion gui --asset .\assets\example-cat\idle.gif --name Ter
 ```
 
 Click and drag the window to move it. Press `Esc` to close it.
+Right-click the mascot for compact controls: state, position, opacity, message
+visibility, and pack reload. The controls update the local runtime and never
+modify pack files. If the mascot appears stuck on idle, check the pack path
+and run pack validate again.
 
 Any process can publish directly by appending one JSON object per line to
 `.companion/inbox.jsonl`. See [SPEC.md](SPEC.md) for the contract and

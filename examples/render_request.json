@@ -1,0 +1,24 @@
+{
+  "name": "Malbolgato",
+  "style": "pixel art black cat with neon green eyes",
+  "palette": [
+    "#111111",
+    "#8cff00",
+    "#c44cff",
+    "#f4f4f4"
+  ],
+  "states": [
+    "idle",
+    "thinking",
+    "working",
+    "success",
+    "error",
+    "waiting"
+  ],
+  "output": {
+    "cell_size": [128, 128]
+  },
+  "renderer": {
+    "notes": "Keep the silhouette readable at small desktop-companion size."
+  }
+}
