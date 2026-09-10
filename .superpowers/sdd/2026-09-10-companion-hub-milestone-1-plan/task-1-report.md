@@ -22,7 +22,7 @@ versioned JSON atomically and gives each companion a separate runtime root.
 
 ## Commit
 
-`e809a9eda25eb9a669ec851aaf386ce9a4fa1ef0` (`feat: add Hub catalog and companion registry`)
+Implementation commit: `68d8ab3fd37fbbf4ce006039ef5e1d463b9a6674`
 
 ## Concerns
 
