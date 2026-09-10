@@ -8,8 +8,9 @@ import tkinter as tk
 import time
 
 from .paths import platform_name
-from .protocol import POSITIONS
-from .pack import AssetPack
+from .protocol import POSITIONS, STATES, new_event
+from .pack import AssetPack, PackError
+from .queue import append_jsonl
 from .runtime import Runtime
 from .scheduled import LocalScheduler, ReminderError, ReminderStore
 
@@ -82,9 +83,22 @@ class AnimatedAsset:
 
 
 class DesktopWindow:
-    def __init__(self, runtime: Runtime, *, asset: Path | None = None, pack: AssetPack | None = None, name: str = "Companion", topmost: bool = True, opacity: float = 1.0):
+    def __init__(
+        self,
+        runtime: Runtime,
+        *,
+        asset: Path | None = None,
+        pack: AssetPack | None = None,
+        name: str = "Companion",
+        topmost: bool = True,
+        opacity: float = 1.0,
+        show_messages: bool = True,
+        pack_name: str | None = None,
+    ):
         self.runtime = runtime
         self.name = name
+        self.opacity = max(0.35, min(1.0, float(opacity)))
+        self.show_messages = show_messages
         self.reminders = ReminderStore(runtime.root / "reminders.json")
         self.scheduler = LocalScheduler(self.reminders, runtime.inbox)
         self.reminder_panel: ReminderPanel | None = None
@@ -97,19 +111,20 @@ class DesktopWindow:
             try:
                 self.root.wm_attributes("-transparentcolor", "magenta")
             except tk.TclError:
-                self.root.attributes("-alpha", opacity)
+                self.root.attributes("-alpha", self.opacity)
         else:
             # Linux/macOS Tk rarely supports -transparentcolor; use alpha.
             try:
-                self.root.attributes("-alpha", opacity)
+                self.root.attributes("-alpha", self.opacity)
             except tk.TclError:
                 pass
         self.root.bind("<ButtonPress-1>", self._drag_start)
         self.root.bind("<B1-Motion>", self._drag_move)
         self.root.bind("<Escape>", lambda _event: self.root.destroy())
-        self.root.bind("<Button-3>", lambda _event: self.open_reminders())
+        self.root.bind("<Button-3>", self._show_controls)
 
         self.pack = pack
+        self.pack_name = pack_name or (pack.name if pack else None)
         self.image_path = asset or (pack.animation_for(state="idle") if pack else None)
         try:
             self.image = AnimatedAsset(self.image_path) if self.image_path else None
@@ -117,7 +132,7 @@ class DesktopWindow:
             self.image = None
         self.image_label = tk.Label(self.root, bg="magenta", fg="#a9ffcb", bd=0, highlightthickness=0)
         self.image_label.pack()
-        self.image_label.bind("<Button-3>", lambda _event: self.open_reminders())
+        self.image_label.bind("<Button-3>", self._show_controls)
         self.bubble = tk.Label(
             self.root,
             text="",
@@ -128,8 +143,100 @@ class DesktopWindow:
             wraplength=260,
             justify="left",
         )
+        self.control_error = tk.Label(self.root, text="", bg="#10151b", fg="#ffadad", padx=6, pady=3)
+        self.messages_var = tk.BooleanVar(value=show_messages)
+        self.context_menu = self._build_context_menu()
         self._drag_origin: tuple[int, int] | None = None
         self._refresh()
+
+    def _build_context_menu(self) -> tk.Menu:
+        menu = tk.Menu(self.root, tearoff=False)
+        state_menu = tk.Menu(menu, tearoff=False)
+        for value in sorted(STATES):
+            state_menu.add_command(label=value, command=lambda value=value: self.set_state(value))
+        menu.add_cascade(label="State", menu=state_menu)
+
+        position_menu = tk.Menu(menu, tearoff=False)
+        for value in sorted(POSITIONS):
+            position_menu.add_command(label=value, command=lambda value=value: self.set_position(value))
+        menu.add_cascade(label="Position", menu=position_menu)
+
+        opacity_menu = tk.Menu(menu, tearoff=False)
+        for label, value in (("35%", 0.35), ("50%", 0.5), ("75%", 0.75), ("100%", 1.0)):
+            opacity_menu.add_command(label=label, command=lambda value=value: self.set_opacity(value))
+        menu.add_cascade(label="Opacity", menu=opacity_menu)
+        menu.add_checkbutton(label="Show messages", variable=self.messages_var, command=self.toggle_messages)
+        menu.add_command(label="Reload pack", command=self.reload_pack)
+        menu.add_separator()
+        menu.add_command(label="Reminders...", command=self.open_reminders)
+        return menu
+
+    def _show_controls(self, event: tk.Event) -> None:
+        try:
+            self.context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.context_menu.grab_release()
+
+    def _publish_events(self, *events: tuple[str, str]) -> None:
+        for event_type, value in events:
+            append_jsonl(
+                self.runtime.inbox,
+                new_event(event_type, agent="gui", companion_id=self.runtime.companion_id, value=value),
+            )
+        self.runtime.process_once()
+
+    def set_state(self, value: str) -> None:
+        if value not in STATES:
+            raise ValueError(f"unknown state: {value}")
+        self._publish_events(("state", value), ("mood", value))
+
+    def set_position(self, value: str) -> None:
+        if value not in POSITIONS:
+            raise ValueError(f"unknown position: {value}")
+        self._publish_events(("move", value))
+        self._place(value)
+
+    def set_opacity(self, value: float) -> None:
+        self.opacity = max(0.35, min(1.0, float(value)))
+        try:
+            self.root.attributes("-alpha", self.opacity)
+        except tk.TclError:
+            pass
+
+    def toggle_messages(self) -> bool:
+        self.show_messages = not self.show_messages
+        self.messages_var.set(self.show_messages)
+        if not self.show_messages and self.bubble.winfo_ismapped():
+            self.bubble.pack_forget()
+        return self.show_messages
+
+    def _show_control_error(self, message: str) -> None:
+        self.control_error.configure(text=message)
+        if message:
+            if not self.control_error.winfo_ismapped():
+                self.control_error.pack()
+        elif self.control_error.winfo_ismapped():
+            self.control_error.pack_forget()
+
+    def reload_pack(self) -> bool:
+        if self.pack is None:
+            self._show_control_error("No pack is configured")
+            return False
+        try:
+            pack = AssetPack.load(self.pack.root)
+            image_path = pack.animation_for(
+                state=self.runtime.state["state"],
+                mood=self.runtime.state.get("mood"),
+            )
+            image = AnimatedAsset(image_path)
+        except (OSError, ValueError, PackError, tk.TclError) as exc:
+            self._show_control_error(str(exc))
+            return False
+        self.pack = pack
+        self.image_path = image_path
+        self.image = image
+        self._show_control_error("")
+        return True
 
     def _drag_start(self, event: tk.Event) -> None:
         self._drag_origin = (event.x_root - self.root.winfo_x(), event.y_root - self.root.winfo_y())
@@ -178,7 +285,7 @@ class DesktopWindow:
         self.root.withdraw() if not state["visible"] else self.root.deiconify()
         self._place(state["position"])
         message = state.get("message")
-        if state["visible"] and message and message.get("text"):
+        if self.show_messages and state["visible"] and message and message.get("text"):
             self.bubble.configure(text=message["text"])
             if not self.bubble.winfo_ismapped():
                 self.bubble.pack()
@@ -196,8 +303,27 @@ class DesktopWindow:
         self.reminder_panel = ReminderPanel(self.root, self.reminders)
 
 
-def launch(runtime: Runtime, *, asset: Path | None = None, pack: AssetPack | None = None, name: str = "Companion", topmost: bool = True, opacity: float = 1.0) -> None:
-    DesktopWindow(runtime, asset=asset, pack=pack, name=name, topmost=topmost, opacity=opacity).show()
+def launch(
+    runtime: Runtime,
+    *,
+    asset: Path | None = None,
+    pack: AssetPack | None = None,
+    name: str = "Companion",
+    topmost: bool = True,
+    opacity: float = 1.0,
+    show_messages: bool = True,
+    pack_name: str | None = None,
+) -> None:
+    DesktopWindow(
+        runtime,
+        asset=asset,
+        pack=pack,
+        name=name,
+        topmost=topmost,
+        opacity=opacity,
+        show_messages=show_messages,
+        pack_name=pack_name,
+    ).show()
 
 
 class ReminderPanel:

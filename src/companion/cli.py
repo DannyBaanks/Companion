@@ -258,6 +258,8 @@ def main(argv: list[str] | None = None) -> int:
             name=(config.name if config and args.name == "Companion" else args.name),
             topmost=config.topmost if config else True,
             opacity=config.opacity if config else 1.0,
+            show_messages=config.show_messages if config else True,
+            pack_name=config.pack_name if config else None,
         )
         return 0
     if args.command == "pack":

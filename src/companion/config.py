@@ -16,9 +16,11 @@ class ConfigError(ValueError):
 class CompanionConfig:
     name: str = "Companion"
     pack: Path | None = None
+    pack_name: str | None = None
     position: str = "bottom-right"
     topmost: bool = True
     opacity: float = 1.0
+    show_messages: bool = True
 
 
 def load_config(path: Path) -> CompanionConfig:
@@ -38,10 +40,13 @@ def load_config(path: Path) -> CompanionConfig:
     if not isinstance(values, dict) or not isinstance(window, dict):
         raise ConfigError("companion and window config sections must be objects")
     pack = values.get("pack")
+    pack_name = values.get("pack_name")
     return CompanionConfig(
         name=str(values.get("name", "Companion")),
         pack=(path.parent / pack).resolve() if isinstance(pack, str) else None,
+        pack_name=pack_name if isinstance(pack_name, str) else None,
         position=str(window.get("position", "bottom-right")),
         topmost=bool(window.get("topmost", True)),
         opacity=float(window.get("opacity", 1.0)),
+        show_messages=bool(window.get("show_messages", True)),
     )
