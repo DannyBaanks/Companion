@@ -1,5 +1,20 @@
 # Open Agent Companion
 
+<p align="center">
+  <strong>A tiny, local desktop companion for agents, CLIs, and humans.</strong><br>
+  Animated pets, useful reminders, and a deliberately boring JSONL protocol.
+</p>
+
+<p align="center">
+  <img src="packs/malbolge-cat/idle.gif" alt="Malbolgato companion" width="180">
+</p>
+
+<p align="center">
+  <a href="LICENSE">MIT License</a> ·
+  <a href="SPEC.md">Protocol</a> ·
+  <a href="SECURITY.md">Security</a>
+</p>
+
 **Open Agent Companion 1.0.0 (MIT).** A local, open desktop companion for
 agents and CLIs. Any agent or local process publishes state and short
 messages through a versioned JSONL protocol; the companion renders them in
@@ -8,6 +23,22 @@ a transparent animated window.
 No AI, no cloud, no accounts. Reminders, timers, recurrence, pomodoro, and
 adapters are producers only: when due, they write a normal `say` event to
 the companion inbox through the same canonical pipeline.
+
+## What you get
+
+- Animated PNG/GIF pets driven by a small, inspectable JSONL event protocol.
+- A compact right-click GUI for state, position, opacity, messages, and packs.
+- Local reminders, timers, recurrence, snooze, and Pomodoro helpers.
+- Optional localhost WebSocket and TypeScript integrations.
+- Declarative packs, so anyone can bring their own art and personality.
+
+## Contents
+
+- [Quick start](#quick-start)
+- [Packs and configuration](#packs-and-configuration)
+- [Adapters](#adapters)
+- [Operating modes](#operating-modes)
+- [Distribution and hardening](#distribution-and-hardening)
 
 ## Quick start
 
@@ -80,9 +111,11 @@ companion --root .companion gui --pack .\assets\example-cat
 
 The included Malbolgato pack and renderer request are a complete smoke test:
 
-    companion pack validate .\packs\malbolge-cat
-    companion render-request validate .\examples\render_request.json
-    companion --root .companion gui --pack .\packs\malbolge-cat
+```powershell
+companion pack validate .\packs\malbolge-cat
+companion render-request validate .\examples\render_request.json
+companion --root .companion gui --pack .\packs\malbolge-cat
+```
 
 examples/render_request.json is a renderer-facing customization contract.
 name and style are required; palette, states, output.cell_size, and
@@ -126,9 +159,9 @@ companion --root .companion gui --asset .\assets\example-cat\idle.gif --name Ter
 
 Click and drag the window to move it. Press `Esc` to close it.
 Right-click the mascot for compact controls: state, position, opacity, message
-visibility, and pack reload. The controls update the local runtime and never
-modify pack files. If the mascot appears stuck on idle, check the pack path
-and run pack validate again.
+visibility, pack selection, and pack reload. The controls update the local
+runtime and never modify pack files. If the mascot appears stuck on idle,
+check the pack path and run pack validate again.
 
 Any process can publish directly by appending one JSON object per line to
 `.companion/inbox.jsonl`. See [SPEC.md](SPEC.md) for the contract and
