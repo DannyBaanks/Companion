@@ -154,9 +154,9 @@ class DesktopWindow:
             pass
         self.root.bind("<ButtonPress-1>", self._drag_start)
         self.root.bind("<B1-Motion>", self._drag_move)
-        self.root.bind("<Escape>", lambda _event: self.root.destroy())
+        self.root.bind("<Escape>", self._escape)
+        self.root.bind("<ButtonRelease-1>", self._left_click_release)
         self.root.bind("<Button-3>", self._show_controls)
-        self.root.bind("<Double-Button-1>", lambda _event: self.toggle_actions())
 
         self.pack = pack
         self.pack_name = pack_name or (pack.name if pack else None)
@@ -168,19 +168,7 @@ class DesktopWindow:
         self.image_label = tk.Label(self.root, bg="magenta", fg="#a9ffcb", bd=0, highlightthickness=0)
         self.image_label.pack()
         self._scale = 1.0
-        self.actions_open = False
-        if hasattr(self.root, "tk"):
-            self.action_button = tk.Button(
-                self.root, text="⋮", command=self.toggle_actions, width=2,
-                bg="#10151b", fg="#a9ffcb", activebackground="#26313b",
-                activeforeground="#ffffff", relief="flat", bd=0, cursor="hand2",
-            )
-            self.action_button.place(relx=1.0, rely=0.0, anchor="ne", x=-4, y=4)
-            self.actions_panel = tk.Frame(self.root, bg="#10151b", bd=1, relief="solid")
-            self._build_actions_panel()
-        else:
-            self.action_button = None
-            self.actions_panel = None
+        self._menu_open = False
         self.bubble = tk.Label(
             self.root,
             text="",
@@ -221,31 +209,16 @@ class DesktopWindow:
         menu.add_command(label="Reminders...", command=self.open_reminders)
         return menu
 
-    def _build_actions_panel(self) -> None:
-        header = tk.Frame(self.actions_panel, bg="#10151b")
-        header.pack(fill="x", padx=6, pady=(4, 2))
-        tk.Label(header, text="Actions", bg="#10151b", fg="#a9ffcb").pack(side="left", padx=2)
-        tk.Button(header, text="_", command=self.toggle_actions, width=2, bg="#202a33", fg="#ffffff", relief="flat").pack(side="right")
-        row = tk.Frame(self.actions_panel, bg="#10151b")
-        row.pack(fill="x", padx=6, pady=3)
-        for label, command in (("−", lambda: self.resize(-0.1)), ("+", lambda: self.resize(0.1)), ("×", self.close)):
-            tk.Button(row, text=label, command=command, width=3, bg="#202a33", fg="#ffffff", relief="flat").pack(side="left", padx=2)
-        tk.Button(self.actions_panel, text="State / position / pack…", command=self.open_context_menu, bg="#202a33", fg="#ffffff", relief="flat").pack(fill="x", padx=6, pady=(2, 6))
-
-    def toggle_actions(self) -> None:
-        if self.actions_panel is None:
-            return
-        self.actions_open = not self.actions_open
-        if self.actions_open:
-            self.actions_panel.place(relx=1.0, rely=0.0, anchor="ne", x=-4, y=34)
-        else:
-            self.actions_panel.place_forget()
-
     def close(self) -> None:
         self.root.destroy()
 
-    def open_context_menu(self) -> None:
-        self._show_controls(type("Event", (), {"x_root": self.root.winfo_rootx() + 8, "y_root": self.root.winfo_rooty() + 8})())
+    def _escape(self, _event: tk.Event) -> str:
+        if self._menu_open:
+            self.context_menu.unpost()
+            self._menu_open = False
+            return "break"
+        self.close()
+        return "break"
 
     def resize(self, delta: float) -> None:
         self._scale = max(0.6, min(1.8, self._scale + delta))
@@ -264,9 +237,27 @@ class DesktopWindow:
 
     def _show_controls(self, event: tk.Event) -> None:
         try:
-            self.context_menu.tk_popup(event.x_root, event.y_root)
+            self.context_menu.update_idletasks()
+            width = self.context_menu.winfo_reqwidth()
+            height = self.context_menu.winfo_reqheight()
+            x = max(0, min(event.x_root + 12, self.root.winfo_screenwidth() - width - 8))
+            y = max(0, min(event.y_root + 12, self.root.winfo_screenheight() - height - 8))
+        except AttributeError:
+            x, y = event.x_root, event.y_root
+        self._menu_open = True
+        try:
+            self.context_menu.tk_popup(x, y)
         finally:
             self.context_menu.grab_release()
+            self._menu_open = False
+
+    def _left_click_release(self, event: tk.Event) -> None:
+        if self._drag_origin:
+            dx = abs(event.x_root - self.root.winfo_x() - self._drag_origin[0])
+            dy = abs(event.y_root - self.root.winfo_y() - self._drag_origin[1])
+            if dx <= 4 and dy <= 4:
+                self._show_controls(event)
+        self._drag_origin = None
 
     def _publish_events(self, *events: tuple[str, str]) -> None:
         for event_type, value in events:
