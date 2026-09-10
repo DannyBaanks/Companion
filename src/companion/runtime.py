@@ -46,12 +46,39 @@ class Runtime:
             seq = data.get("message_sequence")
             if isinstance(seq, int) and seq >= 0:
                 self._message_sequence = seq
+            queue = data.get("message_queue")
+            if isinstance(queue, list):
+                self._message_queue = [item for item in queue if self._valid_queued_message(item)]
+                sequences = [item["sequence"] for item in self._message_queue]
+                if sequences:
+                    self._message_sequence = max(self._message_sequence, *sequences)
+
+    @staticmethod
+    def _valid_queued_message(value: Any) -> bool:
+        if not isinstance(value, dict):
+            return False
+        if not isinstance(value.get("text"), str) or not value["text"]:
+            return False
+        ttl = value.get("ttl")
+        if ttl is not None and (isinstance(ttl, bool) or not isinstance(ttl, (int, float)) or ttl < 0):
+            return False
+        priority = value.get("priority")
+        sequence = value.get("sequence")
+        return (
+            isinstance(priority, int)
+            and not isinstance(priority, bool)
+            and isinstance(sequence, int)
+            and not isinstance(sequence, bool)
+            and sequence >= 0
+            and value.get("expires_at") is None
+        )
 
     def _save_state(self) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         payload = dict(self.state)
         payload["inbox_offset"] = self.offset
         payload["message_sequence"] = self._message_sequence
+        payload["message_queue"] = self._message_queue
         atomic_write_json(self.state_path, payload)
 
     def process_once(self) -> int:

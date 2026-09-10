@@ -58,6 +58,12 @@ shown first; queued message TTL starts when that message is displayed:
 companion --root .companion say "Build urgente" --ttl 8 --priority 10
 ```
 
+Runtime state persists the pending message queue in the companion's state file.
+Queued messages keep their priority and FIFO sequence across Runtime restarts,
+and their TTL begins only when they become visible. Active messages retain their
+existing absolute expiry. Older state files without the queue field continue to
+load with an empty pending queue.
+
 Create and manage local reminders, timers, recurrence, and snooze:
 
 ```powershell
