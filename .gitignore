@@ -12,6 +12,7 @@ venv/
 .hypothesis/
 .ruff_cache/
 .mypy_cache/
+.worktrees/
 
 # Companion runtime data (local only, never commit)
 .companion/
