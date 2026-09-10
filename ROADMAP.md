@@ -7,8 +7,9 @@ left undecided until the product shape is stable.
 
 An open local desktop companion for agents, CLIs, reminders, and other local
 processes. The companion renders generic semantic events; it does not contain
-AI, cloud services, accounts, calendar synchronization, or arbitrary command
-execution.
+AI, cloud services, accounts, or calendar synchronization. Future onboarding
+recipes may propose local installation/configuration commands, but only after
+showing them to the user and receiving explicit confirmation.
 
 ## Completed
 
@@ -110,6 +111,53 @@ Release: **Open Agent Companion 1.0.0 (MIT)**, command `companion`,
 package `open-agent-companion`. See `CHANGELOG.md`, `LICENSE`,
 `CONTRIBUTING.md`, `SECURITY.md`, `examples/`, and `.github/workflows/ci.yml`.
 
+## Companion Hub roadmap
+
+### M11. Companion Hub launcher
+
+- [ ] Consumer-facing desktop Hub with the approved collection, living stage,
+  and contextual-detail layout.
+- [ ] Discover and validate installed companion packs.
+- [ ] Create/select companions with independent runtime roots.
+- [ ] Preview, start, show, hide, and stop Hub-owned companions.
+- [ ] Human-readable status and last activity; technical details stay behind
+  an advanced view.
+- [ ] Separate `Companion Hub.exe` build for Windows.
+- [ ] First-run welcome flow with two clear paths: create a companion or open
+  the local pet collection.
+
+### M12. Companion Forge and guided onboarding
+
+- [ ] Make `Create Companion` the primary onboarding experience for new users.
+- [ ] Provide intention-first choices: coding companion, local AI companion,
+  connect an existing agent, or use pets without an agent.
+- [ ] Add portable declarative Companion Recipes with the lifecycle
+  `detect -> propose -> confirm -> execute -> verify -> receipt`.
+- [ ] Detect common local prerequisites such as Git, Python, Node, and
+  available CLI/TUI agents.
+- [ ] Never execute installation or configuration commands before displaying
+  the exact action and receiving explicit confirmation.
+- [ ] Ship one supported coding-agent recipe plus a generic
+  `connect existing CLI/TUI` recipe.
+- [ ] Guide the user with a bundled default companion instead of technical
+  installer language.
+- [ ] Verify the complete path: agent launches, adapter responds, events reach
+  the runtime, and the companion renders the resulting state/message.
+- [ ] Produce a readable installation receipt and actionable recovery steps.
+
+### M13. Recipe ecosystem and full companion creation
+
+- [ ] Add recipe packs for more CLI/TUI agents, local models, and API-backed
+  providers without coupling the Companion core to any provider.
+- [ ] Define capability contracts for chat, notifications, status, and actions.
+- [ ] Combine agent adapter, capabilities, visual pack, and behavior/personality
+  into one portable companion definition.
+- [ ] Add safe rollback/uninstall hooks for recipe-owned changes.
+- [ ] Import/export recipes and companion configurations.
+- [ ] Add a basic visual pack/manifest editor with validation and preview.
+- [ ] Support profiles, startup preferences, and reusable creation templates.
+- [ ] Document a public recipe authoring contract and verification suite.
+
 ## Explicitly out of scope for now
 
 - Natural-language reminder parsing.
@@ -118,6 +166,8 @@ package `open-agent-companion`. See `CHANGELOG.md`, `LICENSE`,
 - Calendar integration.
 - AI or inference inside the companion.
 - Reminder text executing shell commands.
+- Silent or unreviewed installation commands from Companion Recipes.
+- Recipes terminating or modifying software they do not own.
 - Pack-specific actions such as `cat_jump()` or browser automation.
 
 ## Definition of done for 1.0
