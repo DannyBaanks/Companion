@@ -21,6 +21,9 @@ Included:
 - Show pack previews using each pack's idle asset.
 - Select a companion and display its name, status, last activity, and actions.
 - Create a companion by choosing a validated pack and a display name.
+- Present a first-run welcome with two routes: `Create my companion` and
+  `Open my collection`. In M11, creation configures a local visual companion;
+  agent installation and Capability Doctor execution begin in M12.
 - Start, show, hide, and stop Hub-owned companion processes.
 - Build separate `companion.exe` and `Companion Hub.exe` Windows executables.
 
@@ -29,6 +32,8 @@ Excluded until later milestones:
 - Pack editing, ZIP import, a pack marketplace, profiles, or cloud sync.
 - Managing processes not launched by this Hub instance.
 - Replacing the existing Companion runtime or its event protocol.
+- Installing agents, executing Companion Recipes, or presenting license/source
+  reviews. M11 may preview that future path but must label it as unavailable.
 
 ## Architecture
 
@@ -62,12 +67,19 @@ Tkinter window with three responsive regions:
 - Collection: compact pack/companion cards with idle previews and human status.
 - Living stage: selected preview, soft ambient effect, status, primary action
   (`Open`/`Start`) and secondary `Hide`, then a tertiary overflow menu.
-- Context: current user-facing activity, last activity, personality placeholder
-  derived from the pack/defaults, `Personalize`, and an advanced-details affordance.
+- Context: current user-facing activity, last activity, and a personality
+  summary derived from pack metadata or explicit product defaults, plus
+  `Personalize` and an advanced-details affordance.
 
 The window changes selected cards and button labels immediately; process status
 is refreshed on a bounded timer. It uses one preview widget per selected
 companion, replacing its image rather than stacking widgets.
+
+On an empty registry, the first screen introduces Companion in user language
+and offers `Create my companion` as the primary action. Users may instead open
+the empty collection and add a local pack. The onboarding companion explains
+that connecting a coding agent will arrive through Companion Forge; it does not
+pretend that M11 can install or configure one.
 
 ## Persistence and paths
 
@@ -101,6 +113,8 @@ The Hub makes no network requests.
 - Unit-test registry round trips and unique independent runtime roots.
 - Unit-test process ownership: Hub stops only handles it started.
 - UI tests verify selected-record action labels and a single preview widget.
+- UI tests verify the first-run routing and that Forge features are not exposed
+  as executable actions in M11.
 - Smoke-test both executable build commands and `companion hub --help`.
 - Manual Windows check: discover Malbolge and Tabby Shinji, create two records,
   start one, hide/show it, stop it, and confirm the other remains unaffected.
@@ -108,6 +122,8 @@ The Hub makes no network requests.
 ## Acceptance criteria
 
 - A user can open `Companion Hub.exe` without using a terminal.
+- A first-time user understands how to create a visual companion and where the
+  future guided coding-agent flow will live.
 - At least Malbolge and Tabby Shinji appear as validated local packs when
   installed in the configured packs folder.
 - Starting one companion does not share state files with another.
