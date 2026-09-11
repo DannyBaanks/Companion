@@ -12,10 +12,12 @@ Push-Location $ProjectRoot
 try {
     if ($Target -in @("all", "cli", "hub")) {
         py -m PyInstaller --noconfirm --clean --onefile --name companion --paths src --add-data "packs;packs" src/companion_cli.py
+        if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed while building companion.exe (exit code $LASTEXITCODE)." }
         Write-Output "dist\companion.exe ready. Run: .\dist\companion.exe doctor"
     }
     if ($Target -in @("all", "hub")) {
         py -m PyInstaller --noconfirm --clean --onefile --windowed --name "Companion Hub" --paths src --add-data "packs;packs" src/companion_hub.py
+        if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed while building Companion Hub.exe (exit code $LASTEXITCODE)." }
         Write-Output "dist\Companion Hub.exe ready. Run: .\dist\Companion Hub.exe"
     }
 }

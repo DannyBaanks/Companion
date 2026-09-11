@@ -419,6 +419,23 @@ def test_crash_partial_mutation_guard_is_reclaimable(monkeypatch, tmp_path):
     assert not mutation.exists()
 
 
+def test_ownerless_crash_partial_snapshot_lock_is_reclaimable(monkeypatch, tmp_path):
+    hub_root = tmp_path / "Hub data"
+    bundle = tmp_path / "frozen extraction" / "packs"
+    make_pack(bundle / "local-cat")
+    expected = hub_main._directory_digest(bundle)
+    lock = hub_root / "bundled-packs" / ".locks" / expected
+    lock.mkdir(parents=True)
+    old = time.time() - hub_main._LOCK_LEASE_SECONDS - 1
+    os.utime(lock, (old, old))
+    monkeypatch.setattr(hub_main.sys, "platform", "linux")
+
+    snapshot = hub_main.materialize_bundled_packs(bundle, hub_root)
+
+    assert hub_main._directory_digest(snapshot) == expected
+    assert not lock.exists()
+
+
 def test_windows_lock_acquisition_aborts_when_process_identity_is_unknown(monkeypatch, tmp_path):
     monkeypatch.setattr(hub_main.sys, "platform", "win32")
     monkeypatch.setattr(hub_main, "_windows_process_state", lambda pid: ("unknown", None))

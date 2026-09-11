@@ -43,6 +43,15 @@
   deprecation warning in `tests/test_adapters.py`.
 - `py -m compileall -q src` and `git diff --check` — passed.
 
+### Final review follow-up
+
+- Ownerless crash-partial snapshot locks now use directory identity tokens
+  unaffected by guard-file mtime changes, so they can be reclaimed safely.
+- `tools/build_exe.ps1` now checks `$LASTEXITCODE` after each native
+  PyInstaller invocation and fails instead of reporting stale artifacts ready.
+- Added an end-to-end ownerless-lock recovery regression; final full suite:
+  `156 passed` with the existing asyncio deprecation warning.
+
 ### Final lock hardening — crash-partial metadata and Windows identity
 
 - Partial operation/mutation metadata is recoverable through an inode/stat

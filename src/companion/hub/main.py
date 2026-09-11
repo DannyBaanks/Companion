@@ -205,7 +205,10 @@ def _anonymous_lock_generation(lock: Path) -> str | None:
         state = lock.stat()
     except OSError:
         return None
-    return f"anonymous:{state.st_dev}:{state.st_ino}:{state.st_mtime_ns}"
+    # Directory mtime changes whenever a guard file is created. Use the
+    # directory identity only so crash recovery remains valid while guards
+    # are being claimed and released inside the lock.
+    return f"anonymous:{state.st_dev}:{state.st_ino}"
 
 
 def _lock_generation(lock: Path) -> str | None:
@@ -511,6 +514,11 @@ def _reclaim_snapshot_lock(lock: Path) -> bool:
         return False
     try:
         reclaimable, current_generation = _reclaimable_lock_generation(lock)
+        # Claiming the operation guard updates the directory mtime. For an
+        # ownerless crash-partial lock, retain the initial age decision and
+        # only require that the directory identity is unchanged.
+        if generation.startswith("anonymous:") and current_generation == generation:
+            reclaimable = True
         if not reclaimable or current_generation != generation:
             return False
         return _retire_locked_generation(lock, generation, operation_id)
