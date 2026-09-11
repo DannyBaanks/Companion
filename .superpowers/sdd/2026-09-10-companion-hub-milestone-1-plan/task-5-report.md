@@ -43,6 +43,20 @@
   deprecation warning in `tests/test_adapters.py`.
 - `py -m compileall -q src` and `git diff --check` — passed.
 
+### Final lock hardening — crash-partial metadata and Windows identity
+
+- Partial operation/mutation metadata is recoverable through an inode/stat
+  generation token after the lease expires; replacement verification restores
+  a successor instead of deleting it.
+- Windows lock acquisition now aborts and cleans up when process creation
+  identity cannot be established, preventing unreclaimable locks after a
+  crash. PID reuse is rejected by creation-time identity matching.
+- Added crash-partial tests for both guards and an identity-unavailable test.
+- Focused lock/materialization tests: `31 passed`.
+- Full regression: `py -m pytest -q` — `155 passed`, with the existing asyncio
+  deprecation warning in `tests/test_adapters.py`.
+- `py -m compileall -q src` and `git diff --check` — passed.
+
 ### Fix round 4/5 — Windows-safe ownership and replacement guards
 
 - Windows liveness now uses `OpenProcess` with synchronization/query rights,

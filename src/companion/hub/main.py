@@ -256,7 +256,7 @@ def _write_lock_owner(lock: Path, owner_id: str) -> None:
     if sys.platform == "win32":
         state, process_created_at = _windows_process_state(os.getpid())
         if state != "running":
-            process_created_at = None
+            raise RuntimeError("Companion Hub could not establish a safe Windows process identity for its snapshot lock.")
     atomic_write_json(
         lock / _LOCK_OWNER_FILE,
         {
@@ -298,16 +298,22 @@ def _operation_is_reclaimable(operation: Path) -> bool:
     return _operation_owner_is_reclaimable(payload)
 
 
+def _operation_generation(operation: Path) -> str | None:
+    """Return an owner token, including for crash-partial metadata files."""
+    try:
+        payload = json.loads(operation.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return _anonymous_lock_generation(operation)
+    operation_id = payload.get("operation_id") if isinstance(payload, dict) else None
+    return operation_id if isinstance(operation_id, str) and operation_id else _anonymous_lock_generation(operation)
+
+
 def _reclaim_operation(operation: Path) -> bool:
     """Retire only an abandoned operation guard, never a live one."""
     if not _operation_is_reclaimable(operation):
         return False
-    try:
-        payload = json.loads(operation.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return False
-    operation_id = payload.get("operation_id") if isinstance(payload, dict) else None
-    if not isinstance(operation_id, str) or not operation_id:
+    operation_id = _operation_generation(operation)
+    if operation_id is None:
         return False
     mutation_id = _claim_operation_mutation(operation, operation_id)
     if mutation_id is None:
@@ -338,11 +344,14 @@ def _claim_lock_operation(lock: Path, generation: str) -> str | None:
     operation = lock / _LOCK_OPERATION_FILE
     while True:
         operation_id = uuid.uuid4().hex
+        process_identity = _process_identity()
+        if sys.platform == "win32" and process_identity is None:
+            return None
         payload = {
             "operation_id": operation_id,
             "generation": generation,
             "pid": os.getpid(),
-            "process_created_at": _process_identity(),
+            "process_created_at": process_identity,
             "lease_expires_at": time.time() + _LOCK_LEASE_SECONDS,
         }
         try:
@@ -376,8 +385,10 @@ def _operation_matches(operation: Path, operation_id: str) -> bool:
     try:
         payload = json.loads(operation.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return False
-    return isinstance(payload, dict) and payload.get("operation_id") == operation_id
+        payload = None
+    if isinstance(payload, dict) and payload.get("operation_id") == operation_id:
+        return True
+    return operation_id.startswith("anonymous:") and _anonymous_lock_generation(operation) == operation_id
 
 
 def _mutation_is_reclaimable(mutation: Path) -> bool:
@@ -395,15 +406,20 @@ def _mutation_is_reclaimable(mutation: Path) -> bool:
     return _operation_owner_is_reclaimable(payload)
 
 
-def _reclaim_operation_mutation(mutation: Path) -> bool:
-    if not _mutation_is_reclaimable(mutation):
-        return False
+def _mutation_generation(mutation: Path) -> str | None:
     try:
         payload = json.loads(mutation.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return False
+        return _anonymous_lock_generation(mutation)
     mutation_id = payload.get("mutation_id") if isinstance(payload, dict) else None
-    if not isinstance(mutation_id, str) or not mutation_id:
+    return mutation_id if isinstance(mutation_id, str) and mutation_id else _anonymous_lock_generation(mutation)
+
+
+def _reclaim_operation_mutation(mutation: Path) -> bool:
+    if not _mutation_is_reclaimable(mutation):
+        return False
+    mutation_id = _mutation_generation(mutation)
+    if mutation_id is None:
         return False
     if not _mutation_matches(mutation, mutation_id):
         return False
@@ -427,11 +443,14 @@ def _claim_operation_mutation(operation: Path, operation_id: str) -> str | None:
     mutation = operation.parent / _LOCK_OPERATION_MUTATION_FILE
     while True:
         mutation_id = uuid.uuid4().hex
+        process_identity = _process_identity()
+        if sys.platform == "win32" and process_identity is None:
+            return None
         payload = {
             "mutation_id": mutation_id,
             "operation_id": operation_id,
             "pid": os.getpid(),
-            "process_created_at": _process_identity(),
+            "process_created_at": process_identity,
             "lease_expires_at": time.time() + _LOCK_LEASE_SECONDS,
         }
         try:
@@ -459,8 +478,10 @@ def _mutation_matches(mutation: Path, mutation_id: str) -> bool:
     try:
         payload = json.loads(mutation.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return False
-    return isinstance(payload, dict) and payload.get("mutation_id") == mutation_id
+        payload = None
+    if isinstance(payload, dict) and payload.get("mutation_id") == mutation_id:
+        return True
+    return mutation_id.startswith("anonymous:") and _anonymous_lock_generation(mutation) == mutation_id
 
 
 def _retire_locked_generation(lock: Path, generation: str, operation_id: str) -> bool:

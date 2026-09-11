@@ -4,10 +4,12 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import ctypes
 import json
+import os
 import runpy
 import shutil
 import subprocess
 import sys
+import time
 
 import pytest
 
@@ -393,6 +395,39 @@ def test_live_or_unreadable_snapshot_lock_times_out_without_removal(monkeypatch,
 
     assert lock.is_dir()
     assert owner.is_file()
+
+
+def test_crash_partial_operation_guard_is_reclaimable(monkeypatch, tmp_path):
+    operation = tmp_path / ".operation.json"
+    operation.write_text('{"operation_id":', encoding="utf-8")
+    old = time.time() - hub_main._LOCK_LEASE_SECONDS - 1
+    os.utime(operation, (old, old))
+    monkeypatch.setattr(hub_main.sys, "platform", "linux")
+
+    assert hub_main._reclaim_operation(operation) is True
+    assert not operation.exists()
+
+
+def test_crash_partial_mutation_guard_is_reclaimable(monkeypatch, tmp_path):
+    mutation = tmp_path / ".operation-mutation.json"
+    mutation.write_text('{"mutation_id":', encoding="utf-8")
+    old = time.time() - hub_main._LOCK_LEASE_SECONDS - 1
+    os.utime(mutation, (old, old))
+    monkeypatch.setattr(hub_main.sys, "platform", "linux")
+
+    assert hub_main._reclaim_operation_mutation(mutation) is True
+    assert not mutation.exists()
+
+
+def test_windows_lock_acquisition_aborts_when_process_identity_is_unknown(monkeypatch, tmp_path):
+    monkeypatch.setattr(hub_main.sys, "platform", "win32")
+    monkeypatch.setattr(hub_main, "_windows_process_state", lambda pid: ("unknown", None))
+    lock = tmp_path / "lock"
+    lock.mkdir()
+
+    with pytest.raises(RuntimeError, match="process identity"):
+        hub_main._write_lock_owner(lock, "owner")
+    assert lock.is_dir()
 
 
 def test_publication_collision_accepts_only_a_verified_winner(monkeypatch, tmp_path):
