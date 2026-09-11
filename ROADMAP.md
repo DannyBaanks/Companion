@@ -115,15 +115,15 @@ package `open-agent-companion`. See `CHANGELOG.md`, `LICENSE`,
 
 ### M11. Companion Hub launcher
 
-- [ ] Consumer-facing desktop Hub with the approved collection, living stage,
+- [x] Consumer-facing desktop Hub with the approved collection, living stage,
   and contextual-detail layout.
-- [ ] Discover and validate installed companion packs.
-- [ ] Create/select companions with independent runtime roots.
-- [ ] Preview, start, show, hide, and stop Hub-owned companions.
-- [ ] Human-readable status and last activity; technical details stay behind
+- [x] Discover and validate installed companion packs.
+- [x] Create/select companions with independent runtime roots.
+- [x] Preview, start, show, hide, and stop Hub-owned companions.
+- [x] Human-readable status and last activity; technical details stay behind
   an advanced view.
-- [ ] Separate `Companion Hub.exe` build for Windows.
-- [ ] First-run welcome flow with two clear paths: create a companion or open
+- [x] Separate `Companion Hub.exe` build for Windows.
+- [x] First-run welcome flow with two clear paths: create a companion or open
   the local pet collection.
 
 ### M12. Companion Forge and guided onboarding

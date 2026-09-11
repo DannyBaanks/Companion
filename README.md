@@ -35,6 +35,7 @@ the companion inbox through the same canonical pipeline.
 ## Contents
 
 - [Quick start](#quick-start)
+- [Companion Hub (M11)](#companion-hub-m11)
 - [Packs and configuration](#packs-and-configuration)
 - [Adapters](#adapters)
 - [Operating modes](#operating-modes)
@@ -90,6 +91,57 @@ ticks `message` as `N..1` each minute. Snoozed reminders wait until
 one-shot reminders through the same pipeline; it is not a runtime feature.
 `notify` is an optional best-effort OS notification (`pip install
 'open-agent-companion[notify]'`); it never blocks the pipeline.
+
+## Companion Hub (M11)
+
+Companion Hub is the local, consumer-facing launcher for creating and managing
+visual desktop companions. It discovers installed packs, keeps a small local
+collection, and gives each created companion its own runtime root so pets do
+not share state files.
+
+Launch it from an editable/source install with either command:
+
+```powershell
+companion hub
+companion-hub
+```
+
+Use explicit local paths when you want a portable collection or a different
+pack folder (paths containing spaces are supported):
+
+```powershell
+companion hub --hub-root "D:\Companion Hub data" --packs-dir ".\packs"
+```
+
+On first run, choose **Create my companion** to select a valid local pack and
+give the visual companion a name, or **Open my collection** to browse the
+local pet collection. The selected companion can be started, shown, hidden,
+or stopped. Hub records only the processes it starts in the current session;
+it never stops a pet launched outside that session or one from an earlier Hub
+session.
+
+Hub data belongs to the current local user. By default it lives under the
+platform Companion data directory in `hub`; `--hub-root` overrides that
+location. The Hub registry is `companions.json`, and every companion receives
+an independent `<hub-root>/runtimes/<id>` directory. Hub reads local pack
+manifests and does not modify them.
+
+M11 creates local visual companions only. Companion Forge, capability Doctor,
+agent detection, recipes, installation, and configuration execution begin in
+M12. Hub makes no network requests and does not install agents.
+
+### Windows executables
+
+Build the local PyInstaller artifacts without a network step:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\build_exe.ps1 -Target hub
+```
+
+This produces `dist\companion.exe` for the existing runtime/CLI and
+`dist\Companion Hub.exe` for the desktop launcher. Keep both executables
+together: the Hub starts its sibling `companion.exe` for Hub-owned pets.
+`-Target cli` builds only the CLI/runtime artifact; `-Target all` builds both.
 
 ## Packs and configuration
 
