@@ -175,6 +175,8 @@ class HubWindow:
             return None
 
     def select(self, companion_id: str | None):
+        if self._busy:
+            return
         self.selected_id = companion_id if companion_id in self.companions else None
         record = self.companions.get(self.selected_id)
         self._preview_image = self._load_preview(self._pack(record), 300)
@@ -212,7 +214,7 @@ class HubWindow:
         self.overflow_menu.entryconfigure(0, state="normal" if enabled and status in (
             ProcessStatus.RUNNING, ProcessStatus.HIDDEN, ProcessStatus.EXITED) else "disabled")
         self.overflow_menu.entryconfigure(1, state="normal" if record else "disabled")
-        self.overflow_menu.entryconfigure(2, state="normal" if pack else "disabled")
+        self.overflow_menu.entryconfigure(2, state="normal" if pack and not pack.error else "disabled")
         self.overflow_button.configure(state="normal" if record else "disabled")
         self.status_label.configure(text=text)
         self.activity_label.configure(text=text if record else "Choose a companion from your collection.")

@@ -271,6 +271,7 @@ def test_unusable_pack_disables_actions_and_keeps_diagnostics_secondary(setup, c
     assert "pack" in hub.status_label["text"].lower()
     assert "secret/manifest" not in hub.status_label["text"]
     assert hub.overflow_menu.entries[1]["state"] == "normal"
+    assert hub.overflow_menu.entries[2]["state"] == "disabled"
 
 
 def test_failed_start_keeps_selection_and_reports_friendly_error(setup):
@@ -287,11 +288,15 @@ def test_failed_start_keeps_selection_and_reports_friendly_error(setup):
     assert "couldn’t start" in setup.hub.status_label["text"].lower()
 
 
-def test_selection_during_action_does_not_apply_old_status_to_new_companion(setup):
+def test_selection_during_action_keeps_active_companion_and_progress_visible(setup):
     setup.hub.start_selected()
     setup.hub.select(setup.second.companion_id)
+    assert setup.hub.selected_id == setup.first.companion_id
+    assert setup.hub.name_label["text"] == "Mochi"
+    assert setup.hub.primary_action_text == "Starting…"
     finish_action(setup)
     assert setup.manager.status(setup.first) == ProcessStatus.RUNNING
+    setup.hub.select(setup.second.companion_id)
     assert setup.hub.name_label["text"] == "Fern"
     assert setup.hub.primary_action_text == "Start companion"
 
