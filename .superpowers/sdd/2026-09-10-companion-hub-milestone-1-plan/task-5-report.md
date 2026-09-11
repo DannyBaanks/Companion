@@ -43,6 +43,34 @@
   deprecation warning in `tests/test_adapters.py`.
 - `py -m compileall -q src` and `git diff --check` — passed.
 
+## Review round 2: verified snapshot repair and publication races
+
+The prior snapshot logic trusted a directory solely because its name matched
+the expected SHA-256 value. A deleted asset, partial copy, or colliding publisher
+could therefore leave a bad directory accepted as durable pack data.
+
+- Every reuse and every post-publication winner now has its full tree rehashed
+  and compared with the destination name.
+- Corrupt or incomplete snapshots are moved only to a uniquely named,
+  task-owned backup while a uniquely named staging directory is copied and
+  verified. Both staging and backup paths are cleaned after publication; no
+  broad Hub-root removal is used.
+- Cooperating Hub starts serialize snapshot repair with a per-digest lock
+  directory. Rename/replace errors accept another publisher only after the
+  winner passes exact digest verification; an invalid collision is repaired
+  once from the current bundle, while other I/O errors continue to propagate.
+
+Verification evidence:
+
+- Red: `py -m pytest tests/test_hub_cli.py -q` — 4 failures: an incomplete
+  snapshot was reused, concurrent publish raised Windows `PermissionError`,
+  and both valid and invalid publication-collision behaviors were absent.
+- Green: `py -m pytest tests/test_hub_cli.py tests/test_config.py -q` —
+  22 passed.
+- Full regression: `py -m pytest -q` — 143 passed, with the same existing
+  asyncio deprecation warning in `tests/test_adapters.py`.
+- `py -m compileall -q src` and `git diff --check` — passed.
+
 ## Limitations
 
 The Hub-only packaging smoke did not rebuild the unchanged CLI executable; the

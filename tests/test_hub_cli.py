@@ -1,7 +1,9 @@
 """Composition and entry-point contracts for the local Companion Hub."""
 
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 import runpy
+import shutil
 
 import pytest
 
@@ -164,6 +166,83 @@ def test_changed_frozen_bundle_uses_a_new_stable_snapshot(monkeypatch, tmp_path)
     assert second_snapshot != first_snapshot
     assert (first_snapshot / "local-cat" / "idle.ppm").read_text(encoding="ascii").endswith("0 255 0\n")
     assert (second_snapshot / "local-cat" / "idle.ppm").read_text(encoding="ascii").endswith("255 0 0\n")
+
+
+def test_corrupt_or_incomplete_snapshot_is_repaired_from_the_bundle(monkeypatch, tmp_path):
+    hub_root = tmp_path / "Hub data"
+    bundle = tmp_path / "frozen extraction" / "packs"
+    make_pack(bundle / "local-cat")
+    monkeypatch.setattr(hub_main.sys, "frozen", True, raising=False)
+    snapshot = hub_main.materialize_bundled_packs(bundle, hub_root)
+
+    (snapshot / "local-cat" / "idle.ppm").unlink()
+    repaired = hub_main.materialize_bundled_packs(bundle, hub_root)
+    assert repaired == snapshot
+    assert (repaired / "local-cat" / "idle.ppm").read_text(encoding="ascii").endswith("0 255 0\n")
+
+    (snapshot / "local-cat" / "idle.ppm").write_text("partial", encoding="ascii")
+    repaired_again = hub_main.materialize_bundled_packs(bundle, hub_root)
+    assert repaired_again == snapshot
+    assert hub_main._directory_digest(repaired_again) == snapshot.name
+
+
+def test_concurrent_snapshot_publication_leaves_one_verified_snapshot(monkeypatch, tmp_path):
+    hub_root = tmp_path / "Hub data"
+    bundle = tmp_path / "frozen extraction" / "packs"
+    make_pack(bundle / "local-cat")
+    monkeypatch.setattr(hub_main.sys, "frozen", True, raising=False)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        snapshots = list(executor.map(lambda _: hub_main.materialize_bundled_packs(bundle, hub_root), range(2)))
+
+    assert snapshots[0] == snapshots[1]
+    assert hub_main._directory_digest(snapshots[0]) == snapshots[0].name
+    assert not list((hub_root / "bundled-packs").glob("bundled-packs-*"))
+    assert not list((hub_root / "bundled-packs").glob(".backup-*"))
+
+
+def test_publication_collision_accepts_only_a_verified_winner(monkeypatch, tmp_path):
+    hub_root = tmp_path / "Hub data"
+    bundle = tmp_path / "frozen extraction" / "packs"
+    make_pack(bundle / "local-cat")
+    expected = hub_main._directory_digest(bundle)
+    snapshot = hub_root / "bundled-packs" / expected
+    original_replace = Path.replace
+
+    def publish_winner_then_raise(path, target):
+        if path.name == "packs" and Path(target) == snapshot and path.parent.name.startswith("bundled-packs-"):
+            shutil.copytree(bundle, snapshot)
+            raise OSError("simulated publication collision")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", publish_winner_then_raise)
+
+    assert hub_main.materialize_bundled_packs(bundle, hub_root) == snapshot
+    assert hub_main._directory_digest(snapshot) == expected
+
+
+def test_publication_collision_repairs_an_invalid_winner(monkeypatch, tmp_path):
+    hub_root = tmp_path / "Hub data"
+    bundle = tmp_path / "frozen extraction" / "packs"
+    make_pack(bundle / "local-cat")
+    expected = hub_main._directory_digest(bundle)
+    snapshot = hub_root / "bundled-packs" / expected
+    original_replace = Path.replace
+    collided = False
+
+    def publish_partial_then_raise(path, target):
+        nonlocal collided
+        if not collided and path.name == "packs" and Path(target) == snapshot and path.parent.name.startswith("bundled-packs-"):
+            collided = True
+            snapshot.mkdir(parents=True)
+            (snapshot / "partial").write_text("not a pack", encoding="utf-8")
+            raise OSError("simulated invalid publication collision")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", publish_partial_then_raise)
+
+    assert hub_main.materialize_bundled_packs(bundle, hub_root) == snapshot
+    assert hub_main._directory_digest(snapshot) == expected
 
 
 def test_open_hub_rebinds_frozen_default_packs_to_a_stable_snapshot(monkeypatch, tmp_path):
