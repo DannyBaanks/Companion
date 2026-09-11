@@ -1,7 +1,24 @@
-# Build a local Windows executable with PyInstaller. No network at runtime.
-# Usage: powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1
+# Build local Windows executables with PyInstaller. No network is used at runtime.
+# Usage: powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1 [-Target all|cli|hub]
+param(
+    [ValidateSet("all", "cli", "hub")]
+    [string]$Target = "all"
+)
+
 $ErrorActionPreference = "Stop"
-py -m pip install --upgrade pip
-py -m pip install --editable ".[build]"
-py -m PyInstaller --noconfirm --clean --onefile --name companion --paths src src/companion/cli.py
-Write-Output "dist\companion.exe ready. Run: .\dist\companion.exe doctor"
+
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+Push-Location $ProjectRoot
+try {
+    if ($Target -in @("all", "cli")) {
+        py -m PyInstaller --noconfirm --clean --onefile --name companion --paths src src/companion/cli.py
+        Write-Output "dist\companion.exe ready. Run: .\dist\companion.exe doctor"
+    }
+    if ($Target -in @("all", "hub")) {
+        py -m PyInstaller --noconfirm --clean --onefile --windowed --name "Companion Hub" --paths src --add-data "packs;packs" src/companion/hub/main.py
+        Write-Output "dist\Companion Hub.exe ready. Run: .\dist\Companion Hub.exe"
+    }
+}
+finally {
+    Pop-Location
+}

@@ -89,6 +89,9 @@ def build_parser() -> argparse.ArgumentParser:
     gui.add_argument("--name", default="Companion")
     gui.add_argument("--pack", type=Path)
     gui.add_argument("--config", type=Path)
+    hub = sub.add_parser("hub", help="open the local Companion Hub")
+    hub.add_argument("--hub-root", type=Path, help="local directory for Hub companion data")
+    hub.add_argument("--packs-dir", type=Path, help="local directory containing companion packs")
     pack = sub.add_parser("pack")
     pack_sub = pack.add_subparsers(dest="pack_command", required=True)
     validate = pack_sub.add_parser("validate")
@@ -110,6 +113,15 @@ def main(argv: list[str] | None = None) -> int:
         build_parser().print_usage(sys.stderr)
         print("error: a command is required (try --help)", file=sys.stderr)
         return 2
+    if args.command == "hub":
+        from .hub.main import main as hub_main
+
+        hub_argv: list[str] = []
+        if args.hub_root is not None:
+            hub_argv.extend(["--hub-root", str(args.hub_root)])
+        if args.packs_dir is not None:
+            hub_argv.extend(["--packs-dir", str(args.packs_dir)])
+        return hub_main(hub_argv)
     if args.command == "render-request":
         try:
             request = load_render_request(args.path)

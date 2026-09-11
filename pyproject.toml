@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 
 [project.scripts]
 companion = "companion.cli:main"
+companion-hub = "companion.hub.main:main"
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
