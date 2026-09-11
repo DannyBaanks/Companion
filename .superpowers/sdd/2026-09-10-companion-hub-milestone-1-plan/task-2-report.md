@@ -36,3 +36,21 @@ Implementation commit: `0793210600c37fe78456b0bff149a82f30b6d9ac`
 
 The full suite retains the existing asyncio deprecation warning noted above;
 this task does not modify the affected adapter test or runtime behavior.
+
+## Round 1: retain ownership after a failed termination
+
+Root cause: `stop()` removed the tracked handle and recorded `STOPPED` before
+calling `terminate()`. An exception from `terminate()` therefore lost the still
+running Hub-owned process and made a retry impossible.
+
+- Added `test_failed_termination_keeps_the_owned_handle_for_retry`, which
+  injects `OSError("termination failed")`, asserts `RUNNING` remains visible,
+  then clears the injected failure and verifies a second stop succeeds.
+- Red: `py -m pytest tests/test_hub_processes.py -q` — 1 failed, 7 passed;
+  the new test observed `ProcessStatus.STOPPED` where `RUNNING` was required.
+- Green: `py -m pytest tests/test_hub_processes.py -q` — 8 passed.
+- Full regression: `py -m pytest -q` — 96 passed, with the same pre-existing
+  adapter deprecation warning.
+- `py -m compileall -q src` and `git diff --check` — passed.
+
+Fix commit: `37e27ff3671005626f1e4fad04921389d33f491d`
