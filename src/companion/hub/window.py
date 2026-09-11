@@ -218,6 +218,7 @@ class HubWindow:
         self.preview_label.configure(image="", text="Choose a local visual companion to keep you company.")
         self.open_collection_button.grid()
         self.forge_label.grid()
+        self.add_companion_button.grid_remove()
         self.refresh_status()
 
     def show_collection(self):
@@ -225,6 +226,10 @@ class HubWindow:
         self.current_view = "collection"
         self.open_collection_button.grid_remove()
         self.forge_label.grid_remove()
+        if self.companions:
+            self.add_companion_button.grid()
+        else:
+            self.add_companion_button.grid_remove()
         if self.selected_id not in self.companions:
             self.select(next(iter(self.companions), None))
         else:

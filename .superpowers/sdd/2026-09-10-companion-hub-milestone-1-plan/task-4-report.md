@@ -52,11 +52,22 @@ passed). After the controller and registry changes,
 `py -m pytest tests/test_hub_window.py tests/test_hub_registry.py -q` passed
 with 30 tests, including explicit `OSError` and `PermissionError` cases.
 
+## Fix round 2
+
+- The collection-level `Add companion` control is now removed from the welcome
+  layout, leaving its primary `Create my companion` action as the only visible
+  creation action on first run.
+- The control is restored only when returning to a populated collection. Empty
+  collections continue to use the stage-level creation route.
+- Regression coverage checks both the empty welcome layout and populated
+  collection → welcome → collection visibility transition. The initial test
+  failed because the button remained gridded in welcome; the focused UI suite
+  then passed with 26 tests.
+
 ## Verification
 
-- `py -m pytest tests/test_hub_window.py tests/test_hub_registry.py -q` — 30
-  passed.
-- `py -m pytest -q` — 123 passed. One pre-existing
+- `py -m pytest tests/test_hub_window.py -q` — 26 passed.
+- `py -m pytest -q` — 124 passed. One pre-existing
   `DeprecationWarning` remains in
   `tests/test_adapters.py::test_websocket_rejects_non_loopback`.
 - `git diff --check` — passed.

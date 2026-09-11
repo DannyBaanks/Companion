@@ -31,9 +31,17 @@ class Widget:
         return self.options[key]
 
     def grid(self, **options):
-        self.grid_options = options
+        if options:
+            self.grid_options = options
+        elif self.grid_options != {"removed": True}:
+            return
+        elif getattr(self, "_last_grid_options", None):
+            self.grid_options = self._last_grid_options
+        else:
+            self.grid_options = {}
 
     def grid_remove(self):
+        self._last_grid_options = self.grid_options
         self.grid_options = {"removed": True}
 
     def title(self, text):
@@ -295,6 +303,18 @@ def test_empty_registry_opens_welcome(setup, tmp_path):
 
     assert hub.current_view == "welcome"
     assert hub.welcome_actions == ("Create my companion", "Open my collection")
+    assert hub.add_companion_button.grid_options == {"removed": True}
+
+
+def test_collection_add_button_is_visible_only_for_a_populated_collection(setup):
+    hub = setup.hub
+
+    assert hub.add_companion_button.grid_options["row"] == 2
+    hub.show_welcome()
+    assert hub.add_companion_button.grid_options == {"removed": True}
+    hub.show_collection()
+    assert hub.current_view == "collection"
+    assert hub.add_companion_button.grid_options["row"] == 2
 
 
 def test_m11_does_not_expose_forge_as_an_executable_action(setup, tmp_path):
