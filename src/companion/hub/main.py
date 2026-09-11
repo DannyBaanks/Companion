@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -83,42 +84,117 @@ def _remove_owned_path(path: Path) -> None:
 
 
 _LOCK_LEASE_SECONDS = 30
+_LOCK_WAIT_SECONDS = 5
 _LOCK_OWNER_FILE = "owner.json"
+_LOCK_OPERATION_FILE = ".operation.json"
+_PROCESS_SYNCHRONIZE = 0x00100000
+_STILL_ACTIVE = 259
+_ERROR_INVALID_PARAMETER = 87
+
+
+def _windows_process_is_alive(pid: int) -> bool:
+    """Check a Windows process without sending it a signal."""
+    try:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        open_process = kernel32.OpenProcess
+        get_exit_code = kernel32.GetExitCodeProcess
+        close_handle = kernel32.CloseHandle
+        try:
+            open_process.argtypes = (ctypes.c_ulong, ctypes.c_bool, ctypes.c_ulong)
+            open_process.restype = ctypes.c_void_p
+            get_exit_code.argtypes = (ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong))
+            get_exit_code.restype = ctypes.c_bool
+            close_handle.argtypes = (ctypes.c_void_p,)
+            close_handle.restype = ctypes.c_bool
+        except AttributeError:
+            pass
+        handle = open_process(_PROCESS_SYNCHRONIZE, False, pid)
+    except OSError:
+        return True
+    if not handle:
+        return ctypes.get_last_error() != _ERROR_INVALID_PARAMETER
+    try:
+        exit_code = ctypes.c_ulong()
+        if not get_exit_code(handle, ctypes.byref(exit_code)):
+            return True
+        return exit_code.value == _STILL_ACTIVE
+    finally:
+        close_handle(handle)
 
 
 def _pid_is_alive(pid: object) -> bool:
+    """Return False only when this local process is known to have exited."""
     if not isinstance(pid, int) or pid <= 0:
         return False
+    if sys.platform == "win32":
+        return _windows_process_is_alive(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
-    except PermissionError:
+    except (PermissionError, OSError):
         return True
     return True
 
 
 def _read_lock_owner(lock: Path) -> dict[str, object] | None:
+    """Read absent or malformed metadata, while exposing filesystem failures."""
     try:
         payload = json.loads((lock / _LOCK_OWNER_FILE).read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
+    except (FileNotFoundError, json.JSONDecodeError):
         return None
     return payload if isinstance(payload, dict) else None
 
 
-def _lock_is_reclaimable(lock: Path) -> bool:
-    """Return whether an expired lock has no live local owner."""
-    owner = _read_lock_owner(lock)
-    now = time.time()
-    if owner is not None:
-        expiry = owner.get("lease_expires_at")
-        if isinstance(expiry, (int, float)) and now < expiry:
-            return False
-        return not _pid_is_alive(owner.get("pid"))
+def _anonymous_lock_generation(lock: Path) -> str | None:
     try:
-        return now - lock.stat().st_mtime >= _LOCK_LEASE_SECONDS
-    except FileNotFoundError:
+        state = lock.stat()
+    except OSError:
+        return None
+    return f"anonymous:{state.st_dev}:{state.st_ino}:{state.st_mtime_ns}"
+
+
+def _lock_generation(lock: Path) -> str | None:
+    try:
+        owner = _read_lock_owner(lock)
+    except OSError:
+        return None
+    owner_id = owner.get("owner_id") if owner is not None else None
+    if isinstance(owner_id, str) and owner_id:
+        return f"owner:{owner_id}"
+    return _anonymous_lock_generation(lock)
+
+
+def _owner_matches(lock: Path, generation: str) -> bool:
+    return _lock_generation(lock) == generation
+
+
+def _lock_is_old(lock: Path) -> bool:
+    try:
+        return time.time() - lock.stat().st_mtime >= _LOCK_LEASE_SECONDS
+    except OSError:
         return False
+
+
+def _reclaimable_lock_generation(lock: Path) -> tuple[bool, str | None]:
+    """Return a stale generation token only when its owner is known dead."""
+    try:
+        owner = _read_lock_owner(lock)
+    except OSError:
+        return False, None
+    generation = _lock_generation(lock)
+    if generation is None:
+        return False, None
+    if owner is None or not isinstance(owner.get("owner_id"), str):
+        return _lock_is_old(lock), generation
+    expires_at = owner.get("lease_expires_at")
+    if isinstance(expires_at, (int, float)) and time.time() < expires_at:
+        return False, generation
+    return not _pid_is_alive(owner.get("pid")), generation
+
+
+def _lock_is_reclaimable(lock: Path) -> bool:
+    return _reclaimable_lock_generation(lock)[0]
 
 
 def _write_lock_owner(lock: Path, owner_id: str) -> None:
@@ -132,32 +208,119 @@ def _write_lock_owner(lock: Path, owner_id: str) -> None:
     )
 
 
-def _reclaim_snapshot_lock(lock: Path) -> bool:
-    """Atomically retire a stale lock without touching a live owner's lock."""
-    if not _lock_is_reclaimable(lock) or not _lock_is_reclaimable(lock):
-        return False
-    reclaimed = lock.parent / f".reclaimed-{lock.name}-{uuid.uuid4().hex}"
+def _operation_is_reclaimable(operation: Path) -> bool:
     try:
-        lock.replace(reclaimed)
+        payload = json.loads(operation.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return _lock_is_old(operation)
     except OSError:
-        if not _path_exists(lock):
-            return True
-        if _lock_is_reclaimable(lock):
-            raise
         return False
-    _remove_owned_path(reclaimed)
+    if not isinstance(payload, dict):
+        return _lock_is_old(operation)
+    expires_at = payload.get("lease_expires_at")
+    if isinstance(expires_at, (int, float)) and time.time() < expires_at:
+        return False
+    return not _pid_is_alive(payload.get("pid"))
+
+
+def _reclaim_operation(operation: Path) -> bool:
+    """Retire only an abandoned operation guard, never a live one."""
+    if not _operation_is_reclaimable(operation):
+        return False
+    retired = operation.parent / f".reclaimed-operation-{uuid.uuid4().hex}"
+    try:
+        operation.replace(retired)
+    except OSError:
+        return not _path_exists(operation)
+    _remove_owned_path(retired)
     return True
 
 
-def _release_snapshot_lock(lock: Path, owner_id: str) -> None:
-    owner = _read_lock_owner(lock)
-    if owner is None or owner.get("owner_id") != owner_id:
+def _claim_lock_operation(lock: Path, generation: str) -> str | None:
+    """Create the single mutation guard for one observed lock generation."""
+    operation = lock / _LOCK_OPERATION_FILE
+    while True:
+        operation_id = uuid.uuid4().hex
+        payload = {
+            "operation_id": operation_id,
+            "generation": generation,
+            "pid": os.getpid(),
+            "lease_expires_at": time.time() + _LOCK_LEASE_SECONDS,
+        }
+        try:
+            with operation.open("x", encoding="utf-8") as stream:
+                json.dump(payload, stream)
+            return operation_id
+        except FileExistsError:
+            if not _reclaim_operation(operation):
+                return None
+        except FileNotFoundError:
+            return None
+
+
+def _release_lock_operation(lock: Path, operation_id: str) -> None:
+    operation = lock / _LOCK_OPERATION_FILE
+    try:
+        payload = json.loads(operation.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return
+    if isinstance(payload, dict) and payload.get("operation_id") == operation_id:
+        try:
+            operation.unlink()
+        except FileNotFoundError:
+            return
+
+
+def _operation_matches(lock: Path, operation_id: str) -> bool:
+    try:
+        payload = json.loads((lock / _LOCK_OPERATION_FILE).read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return False
+    return isinstance(payload, dict) and payload.get("operation_id") == operation_id
+
+
+def _retire_locked_generation(lock: Path, generation: str, operation_id: str) -> bool:
+    """Rename the exact guarded generation, leaving successors untouched."""
+    try:
+        if not _operation_matches(lock, operation_id):
+            return False
+        if not _owner_matches(lock, generation):
+            return False
+        retired = lock.parent / f".retired-{lock.name}-{uuid.uuid4().hex}"
+        lock.replace(retired)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    _remove_owned_path(retired)
+    return True
+
+
+def _reclaim_snapshot_lock(lock: Path) -> bool:
+    """Take over only a stale observed generation under a mutation guard."""
+    reclaimable, generation = _reclaimable_lock_generation(lock)
+    if not reclaimable or generation is None:
+        return False
+    operation_id = _claim_lock_operation(lock, generation)
+    if operation_id is None:
+        return False
+    try:
+        reclaimable, current_generation = _reclaimable_lock_generation(lock)
+        if not reclaimable or current_generation != generation:
+            return False
+        return _retire_locked_generation(lock, generation, operation_id)
+    finally:
+        _release_lock_operation(lock, operation_id)
+
+
+def _release_snapshot_lock(lock: Path, generation: str) -> None:
+    operation_id = _claim_lock_operation(lock, generation)
+    if operation_id is None:
         return
     try:
-        (lock / _LOCK_OWNER_FILE).unlink()
-        lock.rmdir()
-    except FileNotFoundError:
-        return
+        _retire_locked_generation(lock, generation, operation_id)
+    finally:
+        _release_lock_operation(lock, operation_id)
 
 
 def _acquire_snapshot_lock(snapshot_root: Path, expected_digest: str) -> tuple[Path, str] | None:
@@ -165,13 +328,17 @@ def _acquire_snapshot_lock(snapshot_root: Path, expected_digest: str) -> tuple[P
     locks_root = snapshot_root / ".locks"
     locks_root.mkdir(exist_ok=True)
     lock = locks_root / expected_digest
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + _LOCK_WAIT_SECONDS
     while True:
         try:
             lock.mkdir()
             owner_id = uuid.uuid4().hex
-            _write_lock_owner(lock, owner_id)
-            return lock, owner_id
+            try:
+                _write_lock_owner(lock, owner_id)
+            except Exception:
+                _remove_owned_path(lock)
+                raise
+            return lock, f"owner:{owner_id}"
         except FileExistsError:
             if _snapshot_matches(snapshot_root / expected_digest, expected_digest):
                 return None
@@ -226,7 +393,7 @@ def materialize_bundled_packs(packs_dir: Path, hub_root: Path) -> Path:
         if _snapshot_matches(snapshot, expected_digest):
             return snapshot
         raise RuntimeError("Bundled pack publication completed without a valid snapshot.")
-    lock, owner_id = acquired_lock
+    lock, generation = acquired_lock
     try:
         if _snapshot_matches(snapshot, expected_digest):
             return snapshot
@@ -255,7 +422,7 @@ def materialize_bundled_packs(packs_dir: Path, hub_root: Path) -> Path:
                     _remove_owned_path(backup)
         raise RuntimeError("Companion Hub could not repair its bundled pack snapshot.")
     finally:
-        _release_snapshot_lock(lock, owner_id)
+        _release_snapshot_lock(lock, generation)
 
 
 def _is_ephemeral_bundle_path(packs_dir: Path) -> bool:

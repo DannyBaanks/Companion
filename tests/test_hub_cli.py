@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+import ctypes
 import json
 import runpy
 import shutil
@@ -231,6 +232,105 @@ def test_expired_lock_with_a_live_owner_is_not_reclaimable(monkeypatch, tmp_path
     monkeypatch.setattr(hub_main, "_pid_is_alive", lambda pid: True)
 
     assert hub_main._lock_is_reclaimable(lock) is False
+
+
+def test_windows_liveness_probe_uses_open_process_without_a_signal(monkeypatch):
+    calls = []
+
+    class Kernel32:
+        def OpenProcess(self, access, inherit_handle, pid):
+            calls.append(("open", access, inherit_handle, pid))
+            return 123
+
+        def GetExitCodeProcess(self, handle, exit_code):
+            calls.append(("exit", handle))
+            ctypes.cast(exit_code, ctypes.POINTER(ctypes.c_ulong)).contents.value = 259
+            return True
+
+        def CloseHandle(self, handle):
+            calls.append(("close", handle))
+            return True
+
+    monkeypatch.setattr(hub_main.sys, "platform", "win32")
+    monkeypatch.setattr(hub_main.ctypes, "WinDLL", lambda *_args, **_kwargs: Kernel32(), raising=False)
+    monkeypatch.setattr(hub_main.os, "kill", lambda *_args: pytest.fail("Windows probe sent a signal"))
+
+    assert hub_main._pid_is_alive(712) is True
+    assert calls == [("open", 0x00100000, False, 712), ("exit", 123), ("close", 123)]
+
+
+def test_reclaim_does_not_remove_a_successor_after_ownership_changes(monkeypatch, tmp_path):
+    lock = tmp_path / "lock"
+    lock.mkdir()
+    (lock / "owner.json").write_text(
+        json.dumps({"owner_id": "crashed", "pid": 991, "lease_expires_at": 0}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(hub_main, "_pid_is_alive", lambda pid: False)
+
+    original_matches = hub_main._owner_matches
+    calls = 0
+
+    def replace_owner_after_observation(path, owner_id):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            (path / "owner.json").write_text(
+                json.dumps({"owner_id": "live", "pid": 992, "lease_expires_at": 9999999999}),
+                encoding="utf-8",
+            )
+        return original_matches(path, owner_id)
+
+    monkeypatch.setattr(hub_main, "_owner_matches", replace_owner_after_observation)
+
+    assert hub_main._reclaim_snapshot_lock(lock) is False
+    assert json.loads((lock / "owner.json").read_text(encoding="utf-8"))["owner_id"] == "live"
+
+
+def test_unreadable_lock_metadata_is_not_reclaimable(monkeypatch, tmp_path):
+    lock = tmp_path / "lock"
+    lock.mkdir()
+    owner = lock / "owner.json"
+    owner.write_text("{}", encoding="utf-8")
+    original_read_text = Path.read_text
+
+    def deny_owner_read(path, *args, **kwargs):
+        if path == owner:
+            raise PermissionError("sharing violation")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", deny_owner_read)
+
+    assert hub_main._lock_is_reclaimable(lock) is False
+
+
+def test_live_or_unreadable_snapshot_lock_times_out_without_removal(monkeypatch, tmp_path):
+    hub_root = tmp_path / "Hub data"
+    bundle = tmp_path / "frozen extraction" / "packs"
+    make_pack(bundle / "local-cat")
+    expected = hub_main._directory_digest(bundle)
+    lock = hub_root / "bundled-packs" / ".locks" / expected
+    lock.mkdir(parents=True)
+    owner = lock / "owner.json"
+    owner.write_text(
+        json.dumps({"owner_id": "live", "pid": 992, "lease_expires_at": 9999999999}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(hub_main, "_LOCK_WAIT_SECONDS", 0)
+    original_read_text = Path.read_text
+
+    def deny_owner_read(path, *args, **kwargs):
+        if path == owner:
+            raise PermissionError("sharing violation")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", deny_owner_read)
+
+    with pytest.raises(RuntimeError, match="Timed out"):
+        hub_main.materialize_bundled_packs(bundle, hub_root)
+
+    assert lock.is_dir()
+    assert owner.is_file()
 
 
 def test_publication_collision_accepts_only_a_verified_winner(monkeypatch, tmp_path):

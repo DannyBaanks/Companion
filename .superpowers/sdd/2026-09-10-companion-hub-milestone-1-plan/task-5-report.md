@@ -43,6 +43,38 @@
   deprecation warning in `tests/test_adapters.py`.
 - `py -m compileall -q src` and `git diff --check` — passed.
 
+## Review round 4: Windows-safe, generation-guarded lock recovery
+
+- Windows owner checks now call `OpenProcess(SYNCHRONIZE)` and
+  `GetExitCodeProcess`; they never use `os.kill` and therefore never send a
+  termination signal. Unknown Windows API failures conservatively count as a
+  live owner. POSIX keeps a non-signalling `kill(pid, 0)` fallback, likewise
+  treating access or other OS failures as live.
+- A lock owner has an immutable UUID generation. Before either release or
+  stale reclaim renames the lock directory, it acquires a single short-lease
+  operation guard, rechecks that exact owner generation, and then retires only
+  that guarded directory. A changed successor owner causes the takeover to
+  stop without moving or deleting it.
+- Owner metadata missing or malformed is distinct from filesystem read errors:
+  old missing/corrupt locks can be recovered by their stable directory
+  generation, while access-denied/sharing errors are non-reclaimable and time
+  out without deletion. Abandoned operation guards use the same dead-owner,
+  bounded-lease recovery rule.
+
+Verification evidence:
+
+- Red: `py -m pytest tests/test_hub_cli.py -q` — 6 failures before the lock
+  ownership API existed, covering abandoned recovery, live-owner protection,
+  Windows liveness, ownership replacement, unreadable metadata, and bounded
+  timeout.
+- Green: `py -m pytest tests/test_hub_cli.py -q` — 25 passed.
+- Windows API smoke: `py -c "from companion.hub.main import _pid_is_alive;
+  import os; print(_pid_is_alive(os.getpid()))"` — printed `True` without a
+  signal-based process check.
+- Full regression: `py -m pytest -q` — 149 passed, with the same existing
+  asyncio deprecation warning in `tests/test_adapters.py`.
+- `py -m compileall -q src` and `git diff --check` — passed.
+
 ### Fix round 2/3 — crash-safe snapshot publication lock
 
 - Snapshot publication locks now record an owner PID, unique owner ID, and
