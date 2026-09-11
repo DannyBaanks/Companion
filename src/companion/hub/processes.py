@@ -77,20 +77,20 @@ class ProcessManager:
 
     def stop(self, record: CompanionRecord) -> bool:
         """Stop a process owned by this Hub session, if one is still tracked."""
-        handle = self._handles.pop(record.companion_id, None)
+        handle = self._handles.get(record.companion_id)
         if handle is None:
             return False
 
+        if handle.poll() is None:
+            try:
+                handle.terminate()
+                handle.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                handle.kill()
+
+        del self._handles[record.companion_id]
         self._hidden.discard(record.companion_id)
         self._stopped.add(record.companion_id)
-        if handle.poll() is not None:
-            return True
-
-        try:
-            handle.terminate()
-            handle.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            handle.kill()
         return True
 
     def status(self, record: CompanionRecord) -> ProcessStatus:

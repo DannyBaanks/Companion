@@ -8,8 +8,9 @@ from companion.hub.processes import ProcessManager, ProcessStatus
 
 
 class FakeProcess:
-    def __init__(self, *, returncode=None, wait_error=None):
+    def __init__(self, *, returncode=None, terminate_error=None, wait_error=None):
         self.returncode = returncode
+        self.terminate_error = terminate_error
         self.wait_error = wait_error
         self.terminate_calls = 0
         self.kill_calls = 0
@@ -20,6 +21,8 @@ class FakeProcess:
 
     def terminate(self):
         self.terminate_calls += 1
+        if self.terminate_error:
+            raise self.terminate_error
 
     def wait(self, timeout):
         self.wait_timeouts.append(timeout)
@@ -129,6 +132,20 @@ def test_stop_kills_only_its_owned_handle_after_timeout(record):
     assert process.terminate_calls == 1
     assert process.wait_timeouts == [3]
     assert process.kill_calls == 1
+
+
+def test_failed_termination_keeps_the_owned_handle_for_retry(record):
+    process = FakeProcess(terminate_error=OSError("termination failed"))
+    manager = ProcessManager(["companion"], popen=FakePopen(process=process))
+    manager.start(record)
+
+    with pytest.raises(OSError, match="termination failed"):
+        manager.stop(record)
+
+    assert manager.status(record) is ProcessStatus.RUNNING
+    process.terminate_error = None
+    assert manager.stop(record) is True
+    assert process.terminate_calls == 2
 
 
 def test_failed_start_leaves_no_owned_entry(record):
