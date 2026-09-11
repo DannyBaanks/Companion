@@ -125,6 +125,9 @@ package `open-agent-companion`. See `CHANGELOG.md`, `LICENSE`,
 - [x] Separate `Companion Hub.exe` build for Windows.
 - [x] First-run welcome flow with two clear paths: create a companion or open
   the local pet collection.
+- [ ] Repeat the packaged Windows UI walkthrough on an interactive desktop
+  before publishing a release artifact (headless CI uses deterministic UI
+  tests and executable/help smoke checks).
 
 ### M12. Companion Forge and guided onboarding
 

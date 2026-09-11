@@ -39,7 +39,8 @@ bundles default packs into stable, content-addressed user data before a
 companion record persists its pack path. A hidden `Companion Hub.exe --help`
 smoke exited successfully. An interactive windowed smoke was not run in the
 headless verification session; Tk behavior is covered by the fake-widget UI
-tests and should be repeated on a desktop before publishing a release.
+tests and should be repeated on a desktop before publishing a release. The
+roadmap intentionally leaves this manual release-gate item unchecked.
 
 ## Acceptance walkthrough
 
@@ -62,4 +63,3 @@ not modified. Hub shutdown does not terminate pets it did not start, and a
 pet's stable bundled-pack snapshot can outlive the Hub process. The executable
 build is self-contained as a pair; distributing only `Companion Hub.exe` is
 not supported because it intentionally requires its sibling runtime.
-

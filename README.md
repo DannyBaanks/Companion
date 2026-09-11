@@ -132,9 +132,11 @@ M12. Hub makes no network requests and does not install agents.
 
 ### Windows executables
 
-Build the local PyInstaller artifacts without a network step:
+Install the optional build tooling once, then build the local PyInstaller
+artifacts without a network step:
 
 ```powershell
+py -m pip install --editable ".[build]"
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\build_exe.ps1 -Target hub
 ```
 
