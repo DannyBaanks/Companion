@@ -87,39 +87,75 @@ _LOCK_LEASE_SECONDS = 30
 _LOCK_WAIT_SECONDS = 5
 _LOCK_OWNER_FILE = "owner.json"
 _LOCK_OPERATION_FILE = ".operation.json"
+_LOCK_OPERATION_MUTATION_FILE = ".operation-mutation.json"
 _PROCESS_SYNCHRONIZE = 0x00100000
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x00001000
+_PROCESS_IDENTITY_ACCESS = _PROCESS_SYNCHRONIZE | _PROCESS_QUERY_LIMITED_INFORMATION
 _STILL_ACTIVE = 259
 _ERROR_INVALID_PARAMETER = 87
 
 
-def _windows_process_is_alive(pid: int) -> bool:
-    """Check a Windows process without sending it a signal."""
+class _FileTime(ctypes.Structure):
+    _fields_ = [("low", ctypes.c_ulong), ("high", ctypes.c_ulong)]
+
+
+def _windows_process_state(pid: int) -> tuple[str, int | None]:
+    """Return dead, running+creation time, or unknown without signaling a process."""
     try:
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         open_process = kernel32.OpenProcess
         get_exit_code = kernel32.GetExitCodeProcess
+        get_process_times = kernel32.GetProcessTimes
         close_handle = kernel32.CloseHandle
         try:
             open_process.argtypes = (ctypes.c_ulong, ctypes.c_bool, ctypes.c_ulong)
             open_process.restype = ctypes.c_void_p
             get_exit_code.argtypes = (ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong))
             get_exit_code.restype = ctypes.c_bool
+            get_process_times.argtypes = (
+                ctypes.c_void_p,
+                ctypes.POINTER(_FileTime),
+                ctypes.POINTER(_FileTime),
+                ctypes.POINTER(_FileTime),
+                ctypes.POINTER(_FileTime),
+            )
+            get_process_times.restype = ctypes.c_bool
             close_handle.argtypes = (ctypes.c_void_p,)
             close_handle.restype = ctypes.c_bool
         except AttributeError:
             pass
-        handle = open_process(_PROCESS_SYNCHRONIZE, False, pid)
+        handle = open_process(_PROCESS_IDENTITY_ACCESS, False, pid)
     except OSError:
-        return True
+        return "unknown", None
     if not handle:
-        return ctypes.get_last_error() != _ERROR_INVALID_PARAMETER
+        if ctypes.get_last_error() == _ERROR_INVALID_PARAMETER:
+            return "dead", None
+        return "unknown", None
     try:
         exit_code = ctypes.c_ulong()
         if not get_exit_code(handle, ctypes.byref(exit_code)):
-            return True
-        return exit_code.value == _STILL_ACTIVE
+            return "unknown", None
+        if exit_code.value != _STILL_ACTIVE:
+            return "dead", None
+        created = _FileTime()
+        unused_exit = _FileTime()
+        kernel = _FileTime()
+        user = _FileTime()
+        if not get_process_times(
+            handle,
+            ctypes.byref(created),
+            ctypes.byref(unused_exit),
+            ctypes.byref(kernel),
+            ctypes.byref(user),
+        ):
+            return "unknown", None
+        return "running", (created.high << 32) | created.low
     finally:
         close_handle(handle)
+
+
+def _windows_process_is_alive(pid: int) -> bool:
+    return _windows_process_state(pid)[0] == "running"
 
 
 def _pid_is_alive(pid: object) -> bool:
@@ -135,6 +171,24 @@ def _pid_is_alive(pid: object) -> bool:
     except (PermissionError, OSError):
         return True
     return True
+
+
+def _owner_is_reclaimable(owner: dict[str, object]) -> bool:
+    """Return whether the exact recorded owner process is known to be gone."""
+    pid = owner.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    if sys.platform != "win32":
+        return not _pid_is_alive(pid)
+    expected_created_at = owner.get("process_created_at")
+    if not isinstance(expected_created_at, int):
+        return False
+    state, actual_created_at = _windows_process_state(pid)
+    if state == "dead":
+        return True
+    if state != "running" or not isinstance(actual_created_at, int):
+        return False
+    return actual_created_at != expected_created_at
 
 
 def _read_lock_owner(lock: Path) -> dict[str, object] | None:
@@ -190,7 +244,7 @@ def _reclaimable_lock_generation(lock: Path) -> tuple[bool, str | None]:
     expires_at = owner.get("lease_expires_at")
     if isinstance(expires_at, (int, float)) and time.time() < expires_at:
         return False, generation
-    return not _pid_is_alive(owner.get("pid")), generation
+    return _owner_is_reclaimable(owner), generation
 
 
 def _lock_is_reclaimable(lock: Path) -> bool:
@@ -198,14 +252,35 @@ def _lock_is_reclaimable(lock: Path) -> bool:
 
 
 def _write_lock_owner(lock: Path, owner_id: str) -> None:
+    process_created_at: int | None = None
+    if sys.platform == "win32":
+        state, process_created_at = _windows_process_state(os.getpid())
+        if state != "running":
+            process_created_at = None
     atomic_write_json(
         lock / _LOCK_OWNER_FILE,
         {
             "owner_id": owner_id,
             "pid": os.getpid(),
+            "process_created_at": process_created_at,
             "lease_expires_at": time.time() + _LOCK_LEASE_SECONDS,
         },
     )
+
+
+def _process_identity() -> int | None:
+    """Return this process' creation identity when Windows can prove it."""
+    if sys.platform != "win32":
+        return None
+    state, created_at = _windows_process_state(os.getpid())
+    return created_at if state == "running" else None
+
+
+def _operation_owner_is_reclaimable(payload: dict[str, object]) -> bool:
+    """Fail closed on Windows when operation metadata lacks process identity."""
+    if sys.platform == "win32":
+        return _owner_is_reclaimable(payload)
+    return not _pid_is_alive(payload.get("pid"))
 
 
 def _operation_is_reclaimable(operation: Path) -> bool:
@@ -220,20 +295,42 @@ def _operation_is_reclaimable(operation: Path) -> bool:
     expires_at = payload.get("lease_expires_at")
     if isinstance(expires_at, (int, float)) and time.time() < expires_at:
         return False
-    return not _pid_is_alive(payload.get("pid"))
+    return _operation_owner_is_reclaimable(payload)
 
 
 def _reclaim_operation(operation: Path) -> bool:
     """Retire only an abandoned operation guard, never a live one."""
     if not _operation_is_reclaimable(operation):
         return False
-    retired = operation.parent / f".reclaimed-operation-{uuid.uuid4().hex}"
     try:
-        operation.replace(retired)
-    except OSError:
-        return not _path_exists(operation)
-    _remove_owned_path(retired)
-    return True
+        payload = json.loads(operation.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return False
+    operation_id = payload.get("operation_id") if isinstance(payload, dict) else None
+    if not isinstance(operation_id, str) or not operation_id:
+        return False
+    mutation_id = _claim_operation_mutation(operation, operation_id)
+    if mutation_id is None:
+        return False
+    try:
+        if not _operation_matches(operation, operation_id) or not _operation_is_reclaimable(operation):
+            return False
+        retired = operation.parent / f".reclaimed-operation-{uuid.uuid4().hex}"
+        try:
+            operation.replace(retired)
+        except OSError:
+            return not _path_exists(operation)
+        if not _operation_matches(retired, operation_id):
+            if not _path_exists(operation):
+                try:
+                    retired.replace(operation)
+                except OSError:
+                    pass
+            return False
+        _remove_owned_path(retired)
+        return True
+    finally:
+        _release_operation_mutation(operation, mutation_id)
 
 
 def _claim_lock_operation(lock: Path, generation: str) -> str | None:
@@ -245,6 +342,7 @@ def _claim_lock_operation(lock: Path, generation: str) -> str | None:
             "operation_id": operation_id,
             "generation": generation,
             "pid": os.getpid(),
+            "process_created_at": _process_identity(),
             "lease_expires_at": time.time() + _LOCK_LEASE_SECONDS,
         }
         try:
@@ -260,29 +358,115 @@ def _claim_lock_operation(lock: Path, generation: str) -> str | None:
 
 def _release_lock_operation(lock: Path, operation_id: str) -> None:
     operation = lock / _LOCK_OPERATION_FILE
-    try:
-        payload = json.loads(operation.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
+    mutation_id = _claim_operation_mutation(operation, operation_id)
+    if mutation_id is None:
         return
-    if isinstance(payload, dict) and payload.get("operation_id") == operation_id:
+    try:
+        if not _operation_matches(operation, operation_id):
+            return
         try:
             operation.unlink()
         except FileNotFoundError:
             return
+    finally:
+        _release_operation_mutation(operation, mutation_id)
 
 
-def _operation_matches(lock: Path, operation_id: str) -> bool:
+def _operation_matches(operation: Path, operation_id: str) -> bool:
     try:
-        payload = json.loads((lock / _LOCK_OPERATION_FILE).read_text(encoding="utf-8"))
+        payload = json.loads(operation.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return False
     return isinstance(payload, dict) and payload.get("operation_id") == operation_id
 
 
+def _mutation_is_reclaimable(mutation: Path) -> bool:
+    try:
+        payload = json.loads(mutation.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return _lock_is_old(mutation)
+    except OSError:
+        return False
+    if not isinstance(payload, dict):
+        return _lock_is_old(mutation)
+    expires_at = payload.get("lease_expires_at")
+    if isinstance(expires_at, (int, float)) and time.time() < expires_at:
+        return False
+    return _operation_owner_is_reclaimable(payload)
+
+
+def _reclaim_operation_mutation(mutation: Path) -> bool:
+    if not _mutation_is_reclaimable(mutation):
+        return False
+    try:
+        payload = json.loads(mutation.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return False
+    mutation_id = payload.get("mutation_id") if isinstance(payload, dict) else None
+    if not isinstance(mutation_id, str) or not mutation_id:
+        return False
+    if not _mutation_matches(mutation, mutation_id):
+        return False
+    retired = mutation.parent / f".reclaimed-mutation-{uuid.uuid4().hex}"
+    try:
+        mutation.replace(retired)
+    except OSError:
+        return not _path_exists(mutation)
+    if not _mutation_matches(retired, mutation_id):
+        if not _path_exists(mutation):
+            try:
+                retired.replace(mutation)
+            except OSError:
+                pass
+        return False
+    _remove_owned_path(retired)
+    return True
+
+
+def _claim_operation_mutation(operation: Path, operation_id: str) -> str | None:
+    mutation = operation.parent / _LOCK_OPERATION_MUTATION_FILE
+    while True:
+        mutation_id = uuid.uuid4().hex
+        payload = {
+            "mutation_id": mutation_id,
+            "operation_id": operation_id,
+            "pid": os.getpid(),
+            "process_created_at": _process_identity(),
+            "lease_expires_at": time.time() + _LOCK_LEASE_SECONDS,
+        }
+        try:
+            with mutation.open("x", encoding="utf-8") as stream:
+                json.dump(payload, stream)
+            return mutation_id
+        except FileExistsError:
+            if not _reclaim_operation_mutation(mutation):
+                return None
+        except FileNotFoundError:
+            return None
+
+
+def _release_operation_mutation(operation: Path, mutation_id: str) -> None:
+    mutation = operation.parent / _LOCK_OPERATION_MUTATION_FILE
+    if not _mutation_matches(mutation, mutation_id):
+        return
+    try:
+        mutation.unlink()
+    except FileNotFoundError:
+        return
+
+
+def _mutation_matches(mutation: Path, mutation_id: str) -> bool:
+    try:
+        payload = json.loads(mutation.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return False
+    return isinstance(payload, dict) and payload.get("mutation_id") == mutation_id
+
+
 def _retire_locked_generation(lock: Path, generation: str, operation_id: str) -> bool:
     """Rename the exact guarded generation, leaving successors untouched."""
     try:
-        if not _operation_matches(lock, operation_id):
+        if not _operation_matches(lock / _LOCK_OPERATION_FILE, operation_id):
             return False
         if not _owner_matches(lock, generation):
             return False

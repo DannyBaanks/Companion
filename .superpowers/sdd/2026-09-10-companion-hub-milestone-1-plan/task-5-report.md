@@ -43,6 +43,21 @@
   deprecation warning in `tests/test_adapters.py`.
 - `py -m compileall -q src` and `git diff --check` — passed.
 
+### Fix round 4/5 — Windows-safe ownership and replacement guards
+
+- Windows liveness now uses `OpenProcess` with synchronization/query rights,
+  `GetExitCodeProcess`, and `GetProcessTimes`; it never probes with
+  `os.kill`, and PID reuse is rejected unless the recorded creation identity
+  matches.
+- Snapshot and nested operation guards carry owner generations and use
+  mutation tokens; replacement verification restores an observed successor
+  instead of deleting it. Unreadable metadata fails closed and waits are
+  bounded.
+- Focused lock/materialization tests: `28 passed`.
+- Full regression: `py -m pytest -q` — `152 passed`, with the existing
+  asyncio deprecation warning in `tests/test_adapters.py`.
+- `py -m compileall -q src` and `git diff --check` — passed.
+
 ## Review round 4: Windows-safe, generation-guarded lock recovery
 
 - Windows owner checks now call `OpenProcess(SYNCHRONIZE)` and

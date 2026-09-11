@@ -6,6 +6,8 @@ import ctypes
 import json
 import runpy
 import shutil
+import subprocess
+import sys
 
 import pytest
 
@@ -214,6 +216,7 @@ def test_abandoned_snapshot_lock_is_reclaimed_before_repair(monkeypatch, tmp_pat
         json.dumps({"owner_id": "crashed", "pid": 991, "lease_expires_at": 0}),
         encoding="utf-8",
     )
+    monkeypatch.setattr(hub_main.sys, "platform", "linux")
     monkeypatch.setattr(hub_main, "_pid_is_alive", lambda pid: False)
 
     snapshot = hub_main.materialize_bundled_packs(bundle, hub_root)
@@ -229,6 +232,7 @@ def test_expired_lock_with_a_live_owner_is_not_reclaimable(monkeypatch, tmp_path
         json.dumps({"owner_id": "live", "pid": 992, "lease_expires_at": 0}),
         encoding="utf-8",
     )
+    monkeypatch.setattr(hub_main.sys, "platform", "linux")
     monkeypatch.setattr(hub_main, "_pid_is_alive", lambda pid: True)
 
     assert hub_main._lock_is_reclaimable(lock) is False
@@ -247,6 +251,13 @@ def test_windows_liveness_probe_uses_open_process_without_a_signal(monkeypatch):
             ctypes.cast(exit_code, ctypes.POINTER(ctypes.c_ulong)).contents.value = 259
             return True
 
+        def GetProcessTimes(self, handle, created, unused_exit, kernel, user):
+            calls.append(("times", handle))
+            file_time = ctypes.cast(created, ctypes.POINTER(hub_main._FileTime)).contents
+            file_time.low = 1
+            file_time.high = 2
+            return True
+
         def CloseHandle(self, handle):
             calls.append(("close", handle))
             return True
@@ -256,7 +267,57 @@ def test_windows_liveness_probe_uses_open_process_without_a_signal(monkeypatch):
     monkeypatch.setattr(hub_main.os, "kill", lambda *_args: pytest.fail("Windows probe sent a signal"))
 
     assert hub_main._pid_is_alive(712) is True
-    assert calls == [("open", 0x00100000, False, 712), ("exit", 123), ("close", 123)]
+    assert calls == [
+        ("open", 0x00101000, False, 712),
+        ("exit", 123),
+        ("times", 123),
+        ("close", 123),
+    ]
+
+
+def test_windows_process_state_recognizes_a_terminated_subprocess():
+    process = subprocess.Popen([sys.executable, "-c", "pass"])
+    process.wait(timeout=10)
+
+    assert hub_main._windows_process_state(process.pid) == ("dead", None)
+
+
+def test_windows_owner_reclaim_requires_an_exact_creation_identity(monkeypatch):
+    owner = {"pid": 712, "process_created_at": 100}
+    monkeypatch.setattr(hub_main.sys, "platform", "win32")
+
+    monkeypatch.setattr(hub_main, "_windows_process_state", lambda pid: ("running", 101))
+    assert hub_main._owner_is_reclaimable(owner) is True
+
+    monkeypatch.setattr(hub_main, "_windows_process_state", lambda pid: ("running", 100))
+    assert hub_main._owner_is_reclaimable(owner) is False
+
+    monkeypatch.setattr(hub_main, "_windows_process_state", lambda pid: ("unknown", None))
+    assert hub_main._owner_is_reclaimable(owner) is False
+
+
+def test_reclaim_operation_keeps_a_replacement_operation(monkeypatch, tmp_path):
+    operation = tmp_path / ".operation.json"
+    operation.write_text(
+        json.dumps({"operation_id": "crashed", "pid": 991, "lease_expires_at": 0}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(hub_main.sys, "platform", "linux")
+    monkeypatch.setattr(hub_main, "_pid_is_alive", lambda pid: False)
+    original_matches = hub_main._operation_matches
+
+    def replace_operation_after_observation(path, operation_id):
+        if operation_id == "crashed":
+            path.write_text(
+                json.dumps({"operation_id": "live", "pid": 992, "lease_expires_at": 9999999999}),
+                encoding="utf-8",
+            )
+        return original_matches(path, operation_id)
+
+    monkeypatch.setattr(hub_main, "_operation_matches", replace_operation_after_observation)
+
+    assert hub_main._reclaim_operation(operation) is False
+    assert json.loads(operation.read_text(encoding="utf-8"))["operation_id"] == "live"
 
 
 def test_reclaim_does_not_remove_a_successor_after_ownership_changes(monkeypatch, tmp_path):
@@ -266,6 +327,7 @@ def test_reclaim_does_not_remove_a_successor_after_ownership_changes(monkeypatch
         json.dumps({"owner_id": "crashed", "pid": 991, "lease_expires_at": 0}),
         encoding="utf-8",
     )
+    monkeypatch.setattr(hub_main.sys, "platform", "linux")
     monkeypatch.setattr(hub_main, "_pid_is_alive", lambda pid: False)
 
     original_matches = hub_main._owner_matches
