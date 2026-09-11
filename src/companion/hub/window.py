@@ -55,8 +55,18 @@ class HubWindow:
         self._closed = False
         self._refresh_id = None
         self.collection_cards: dict[str, tk.Button] = {}
+        self.current_view = "collection"
+        self.welcome_actions = ("Create my companion", "Open my collection")
+        self.forge_copy = "Companion Forge — guided coding-agent setup arrives in M12"
+        self.executable_actions = (
+            "Create my companion", "Open my collection", "Start companion",
+            "Show companion", "Hide companion", "Stop companion", "Open pack folder",
+        )
         self._build()
-        self.select(next(iter(self.companions), None))
+        if self.companions:
+            self.show_collection()
+        else:
+            self.show_welcome()
         self.root.bind("<Destroy>", self._on_destroy, add="+")
         self._schedule_refresh()
 
@@ -126,6 +136,14 @@ class HubWindow:
         self.overflow_menu.add_command(label="Advanced details", command=self._show_details)
         self.overflow_menu.add_command(label="Open pack folder", command=self._open_pack_folder)
         self.overflow_button.configure(menu=self.overflow_menu)
+        self.open_collection_button = tk.Button(
+            actions, text="Open my collection", command=self.show_collection, bg=_STAGE,
+            fg=_INK, relief="flat", padx=10, pady=12, font=("Segoe UI", 11),
+        )
+        self.open_collection_button.grid(row=0, column=3)
+        self.forge_label = self._label(self.stage, self.forge_copy, color=_MUTED, wrap=320)
+        self.forge_label.grid(row=5, column=0, pady=(10, 0))
+        self.forge_label.configure(state="disabled")
 
         self.context = tk.Frame(self.content, bg=_PANEL, padx=20, pady=24)
         self.context.grid(row=1, column=2, sticky="nsew", padx=(16, 0))
@@ -185,9 +203,52 @@ class HubWindow:
         self.name_label.configure(text=record.name if record else "Make yourself at home")
         self.refresh_status()
 
+    def show_welcome(self):
+        """Show first-run guidance without leaving the Hub's single window."""
+        self.current_view = "welcome"
+        self.selected_id = None
+        self._preview_image = None
+        self.name_label.configure(text="Make yourself at home")
+        self.preview_label.configure(image="", text="Choose a local visual companion to keep you company.")
+        self.open_collection_button.grid()
+        self.forge_label.grid()
+        self.refresh_status()
+
+    def show_collection(self):
+        """Return to the collection and select an available companion."""
+        self.current_view = "collection"
+        self.open_collection_button.grid_remove()
+        self.forge_label.grid_remove()
+        if self.selected_id not in self.companions:
+            self.select(next(iter(self.companions), None))
+        else:
+            self.refresh_status()
+
+    def create_from_pack(self, pack_id: str, name: str) -> CompanionRecord:
+        """Persist one companion using a validated pack already in the local catalog."""
+        pack = next((item for item in self.packs if item.pack_id == pack_id and not item.error), None)
+        if pack is None:
+            raise ValueError("choose a valid local companion pack")
+        record = self.registry.create(name, pack.root)
+        self.companions[record.companion_id] = record
+        self._build_cards()
+        self.show_collection()
+        self.select(record.companion_id)
+        return record
+
     def refresh_status(self):
         """Render current state without scheduling extra callbacks or reading disk."""
         if self._closed:
+            return
+        if self.current_view == "welcome":
+            has_valid_pack = any(not pack.error for pack in self.packs)
+            self.primary_action_text = "Create my companion"
+            self.primary_button.configure(text=self.primary_action_text, state="normal" if has_valid_pack else "disabled")
+            self.hide_button.configure(state="disabled")
+            self.overflow_button.configure(state="disabled")
+            self.status_label.configure(text="Start with a local visual companion. You can browse your collection anytime.")
+            self.activity_label.configure(text="Choose a local pack to begin.")
+            self.last_activity_label.configure(text="No activity in this session yet.")
             return
         for cid, card in self.collection_cards.items():
             record = self.companions[cid]
@@ -200,6 +261,8 @@ class HubWindow:
         status = self.processes.status(record) if record else None
         running = status in (ProcessStatus.RUNNING, ProcessStatus.HIDDEN)
         self.primary_action_text = "Show companion" if running else "Start companion"
+        if record is None:
+            self.primary_action_text = "Create my companion"
         text = _STATUS[status] if record else "Your collection is waiting for its first companion."
         if record and not valid:
             text = "This companion’s pack needs attention. See Advanced details."
@@ -208,7 +271,7 @@ class HubWindow:
         if self._busy and self._busy[0] == self.selected_id:
             self.primary_action_text = _PROGRESS[self._busy[1]]
             text = self.primary_action_text
-        enabled = bool(valid and self._busy is None)
+        enabled = bool((valid or (record is None and any(not item.error for item in self.packs))) and self._busy is None)
         self.primary_button.configure(text=self.primary_action_text, state="normal" if enabled else "disabled")
         self.hide_button.configure(state="normal" if enabled and status == ProcessStatus.RUNNING else "disabled")
         self.overflow_menu.entryconfigure(0, state="normal" if enabled and status in (
@@ -222,10 +285,43 @@ class HubWindow:
 
     def _primary_action(self):
         record = self.companions.get(self.selected_id)
+        if record is None:
+            self._open_creation_dialog()
+            return
         if record and self.processes.status(record) in (ProcessStatus.RUNNING, ProcessStatus.HIDDEN):
             self.show_selected()
         else:
             self.start_selected()
+
+    def _open_creation_dialog(self):
+        """Let a first-time user choose a local pack and a display name."""
+        packs = [pack for pack in self.packs if not pack.error]
+        if not packs:
+            self.status_label.configure(text="Add a valid local pack, then create your companion here.")
+            return
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Create my companion")
+        dialog.configure(bg=_PANEL)
+        self._label(dialog, "Choose a local companion", size=15, bold=True).grid(row=0, column=0, columnspan=2, sticky="w")
+        self._label(dialog, "Pack", color=_MUTED).grid(row=1, column=0, sticky="w", pady=(16, 8))
+        pack_id = tk.StringVar(value=packs[0].pack_id)
+        tk.OptionMenu(dialog, pack_id, *(pack.pack_id for pack in packs)).grid(row=1, column=1, sticky="ew", pady=(16, 8))
+        self._label(dialog, "Name", color=_MUTED).grid(row=2, column=0, sticky="w", pady=(0, 8))
+        name = tk.StringVar(value=packs[0].name)
+        entry = tk.Entry(dialog, textvariable=name)
+        entry.grid(row=2, column=1, sticky="ew", pady=(0, 8))
+
+        def create():
+            try:
+                self.create_from_pack(pack_id.get(), name.get().strip())
+            except ValueError as exc:
+                messagebox.showerror("Create my companion", str(exc), parent=dialog)
+                return
+            dialog.destroy()
+
+        tk.Button(dialog, text="Create my companion", command=create, bg=_ACCENT, fg="white").grid(
+            row=3, column=0, columnspan=2, pady=(12, 0))
+        entry.focus_set()
 
     def start_selected(self):
         self._begin_action("start", (ProcessStatus.STOPPED, ProcessStatus.EXITED, ProcessStatus.UNMANAGED))

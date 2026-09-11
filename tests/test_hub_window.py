@@ -33,6 +33,9 @@ class Widget:
     def grid(self, **options):
         self.grid_options = options
 
+    def grid_remove(self):
+        self.grid_options = {"removed": True}
+
     def grid_columnconfigure(self, *args, **kwargs):
         pass
 
@@ -247,14 +250,55 @@ def test_empty_and_unknown_selection_disable_actions(setup, tmp_path):
     registry = CompanionRegistry(tmp_path / "empty.json", tmp_path / "empty-runtimes")
     hub = window.HubWindow(Root(), setup.packs, registry, setup.manager)
     assert hub.selected_id is None
-    assert hub.primary_button["state"] == "disabled"
-    assert "collection" in hub.status_label["text"].lower()
+    assert hub.primary_button["state"] == "normal"
+    assert hub.primary_action_text == "Create my companion"
+    assert "local visual companion" in hub.status_label["text"].lower()
     hub.select("not-a-companion")
     hub.start_selected()
     hub.hide_selected()
     hub.show_selected()
     hub.stop_selected()
     assert not DeferredThread.jobs
+
+
+def test_empty_registry_opens_welcome(setup, tmp_path):
+    registry = CompanionRegistry(tmp_path / "empty.json", tmp_path / "empty-runtimes")
+
+    hub = window.HubWindow(Root(), setup.packs, registry, setup.manager)
+
+    assert hub.current_view == "welcome"
+    assert hub.welcome_actions == ("Create my companion", "Open my collection")
+
+
+def test_m11_does_not_expose_forge_as_an_executable_action(setup, tmp_path):
+    registry = CompanionRegistry(tmp_path / "empty.json", tmp_path / "empty-runtimes")
+    hub = window.HubWindow(Root(), setup.packs, registry, setup.manager)
+
+    assert hub.forge_copy == "Companion Forge — guided coding-agent setup arrives in M12"
+    assert "Install agent" not in hub.executable_actions
+
+
+def test_create_from_valid_local_pack_persists_and_selects_one_companion(setup, tmp_path):
+    registry = CompanionRegistry(tmp_path / "empty.json", tmp_path / "empty-runtimes")
+    hub = window.HubWindow(Root(), setup.packs, registry, setup.manager)
+
+    created = hub.create_from_pack("fox", "Fern")
+
+    assert registry.list() == [created]
+    assert created.pack_root == setup.packs[1].root.resolve()
+    assert hub.current_view == "collection"
+    assert hub.selected_id == created.companion_id
+    assert hub.name_label["text"] == "Fern"
+
+
+def test_create_from_invalid_pack_does_not_write_a_companion(setup, tmp_path):
+    registry = CompanionRegistry(tmp_path / "empty.json", tmp_path / "empty-runtimes")
+    hub = window.HubWindow(Root(), setup.packs, registry, setup.manager)
+
+    with pytest.raises(ValueError, match="valid local companion pack"):
+        hub.create_from_pack("missing", "Fern")
+
+    assert registry.list() == []
 
 
 @pytest.mark.parametrize("catalog", ["invalid", "missing"])
