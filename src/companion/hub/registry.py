@@ -43,10 +43,17 @@ class CompanionRegistry:
             pack_root=Path(pack_root).resolve(),
             runtime_root=(self.runtimes_dir / companion_id).resolve(),
         )
-        record.runtime_root.mkdir(parents=True, exist_ok=True)
-        records = self.list()
-        records.append(record)
-        self._save(records)
+        record.runtime_root.mkdir(parents=True, exist_ok=False)
+        try:
+            records = self.list()
+            records.append(record)
+            self._save(records)
+        except Exception:
+            try:
+                record.runtime_root.rmdir()
+            except OSError:
+                pass
+            raise
         return record
 
     def get(self, companion_id: str) -> CompanionRecord | None:

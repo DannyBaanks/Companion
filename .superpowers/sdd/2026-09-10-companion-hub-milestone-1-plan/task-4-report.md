@@ -26,16 +26,44 @@
    failed, 17 passed).
 4. Implemented validated local creation; focused UI tests passed (19 passed).
 
+## Fix round 1
+
+- Added a visible `Add companion` action to the populated collection. The
+  focused test opens this actual UI route, chooses the human-readable `Fox`
+  pack label, enters a name, submits, and verifies that the existing Hub
+  selects the newly persisted local companion.
+- Creation now uses dialog-local inline feedback. Blank names keep the dialog
+  open with a validation message; `OSError` and `PermissionError` from local
+  registry work keep it open with a recoverable permissions/storage message.
+- Registry persistence now removes the just-created, empty runtime directory
+  when saving its record fails, so a failed local creation leaves no orphan
+  runtime root.
+- Empty first-run views distinguish absent packs from invalid local packs and
+  disable creation with an explicit inline explanation.
+- Pack choices show `PackRecord.name` and map the displayed choice back to its
+  stable `pack_id`; no Forge, network, agent-installation, recipe, or shell
+  action was added.
+
+### Fix-round TDD evidence
+
+The new focused contracts first failed as expected: no populated-Hub add
+route, generic missing-pack messaging, and no runtime rollback (6 failed, 22
+passed). After the controller and registry changes,
+`py -m pytest tests/test_hub_window.py tests/test_hub_registry.py -q` passed
+with 30 tests, including explicit `OSError` and `PermissionError` cases.
+
 ## Verification
 
-- `py -m pytest tests/test_hub_window.py -q` — 19 passed.
-- `py -m pytest -q` — 115 passed. One pre-existing
+- `py -m pytest tests/test_hub_window.py tests/test_hub_registry.py -q` — 30
+  passed.
+- `py -m pytest -q` — 123 passed. One pre-existing
   `DeprecationWarning` remains in
   `tests/test_adapters.py::test_websocket_rejects_non_loopback`.
 - `git diff --check` — passed.
 
 ## Scope
 
-Only `src/companion/hub/window.py` and `tests/test_hub_window.py` were
-modified for the feature, plus this report. No plan, approved specification,
+The fix round modified `src/companion/hub/window.py`,
+`src/companion/hub/registry.py`, `tests/test_hub_window.py`,
+`tests/test_hub_registry.py`, and this report. No plan, approved specification,
 or ledger files were changed.

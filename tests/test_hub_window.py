@@ -36,6 +36,9 @@ class Widget:
     def grid_remove(self):
         self.grid_options = {"removed": True}
 
+    def title(self, text):
+        self.options["title"] = text
+
     def grid_columnconfigure(self, *args, **kwargs):
         pass
 
@@ -103,6 +106,27 @@ class Root(Widget):
         callback()
 
 
+class StringVar:
+    def __init__(self, value=""):
+        self.value = value
+
+    def get(self):
+        return self.value
+
+    def set(self, value):
+        self.value = value
+
+
+class OptionMenu(Widget):
+    def __init__(self, master, variable, *values):
+        super().__init__(master, variable=variable, values=values)
+
+
+class Entry(Widget):
+    def focus_set(self):
+        self.focused = True
+
+
 class Photo:
     def __init__(self, **options):
         self.file = options["file"]
@@ -145,6 +169,9 @@ def setup(monkeypatch, tmp_path):
     for name in ("Frame", "Label", "Button", "Menubutton", "Menu", "Canvas", "Scrollbar", "Toplevel"):
         monkeypatch.setattr(window.tk, name, Widget)
     monkeypatch.setattr(window.tk, "PhotoImage", Photo)
+    monkeypatch.setattr(window.tk, "StringVar", StringVar)
+    monkeypatch.setattr(window.tk, "OptionMenu", OptionMenu)
+    monkeypatch.setattr(window.tk, "Entry", Entry)
     monkeypatch.setattr(window, "Thread", DeferredThread)
     DeferredThread.jobs = []
     packs = [PackRecord(name, name.title(), tmp_path / name, tmp_path / name / "idle.png", None)
@@ -299,6 +326,80 @@ def test_create_from_invalid_pack_does_not_write_a_companion(setup, tmp_path):
         hub.create_from_pack("missing", "Fern")
 
     assert registry.list() == []
+
+
+def test_populated_collection_add_route_creates_selected_local_companion(setup):
+    hub = setup.hub
+
+    hub.add_companion_button.invoke()
+    dialog = setup.root.children[-1]
+    pack_picker = next(child for child in dialog.children if isinstance(child, OptionMenu))
+    name_entry = next(child for child in dialog.children if isinstance(child, Entry))
+    submit = next(child for child in dialog.children if child.options.get("text") == "Create my companion")
+    assert pack_picker.options["values"] == ("Cat", "Fox")
+    pack_picker.options["variable"].set("Fox")
+    name_entry.options["textvariable"].set("Juniper")
+
+    submit.invoke()
+
+    created = setup.registry.get("juniper")
+    assert created is not None
+    assert created.pack_root == setup.packs[1].root.resolve()
+    assert hub.selected_id == created.companion_id
+    assert dialog not in setup.root.children
+
+
+@pytest.mark.parametrize("error", [OSError("disk unavailable"), PermissionError("denied")])
+def test_creation_dialog_keeps_user_recoverable_when_registry_write_fails(setup, monkeypatch, error):
+    hub = setup.hub
+    monkeypatch.setattr(setup.registry, "create", lambda name, root: (_ for _ in ()).throw(error))
+
+    hub.add_companion_button.invoke()
+    dialog = setup.root.children[-1]
+    submit = next(child for child in dialog.children if child.options.get("text") == "Create my companion")
+
+    submit.invoke()
+
+    feedback = next(child for child in dialog.children if getattr(child, "hub_role", None) == "creation-feedback")
+    assert "couldn’t save" in feedback.options["text"].lower()
+    assert dialog in setup.root.children
+    assert hub.selected_id == setup.first.companion_id
+
+
+def test_creation_dialog_shows_name_validation_feedback_without_closing(setup):
+    hub = setup.hub
+
+    hub.add_companion_button.invoke()
+    dialog = setup.root.children[-1]
+    name_entry = next(child for child in dialog.children if isinstance(child, Entry))
+    submit = next(child for child in dialog.children if child.options.get("text") == "Create my companion")
+    name_entry.options["textvariable"].set(" ")
+
+    submit.invoke()
+
+    feedback = next(child for child in dialog.children if getattr(child, "hub_role", None) == "creation-feedback")
+    assert "name" in feedback.options["text"].lower()
+    assert dialog in setup.root.children
+
+
+@pytest.mark.parametrize("packs, expected", [
+    ([], "No local companion packs were found"),
+    ([PackRecord("broken", "Broken", Path("broken"), None, "manifest invalid")], "No valid local companion packs were found"),
+])
+def test_empty_first_run_explains_missing_or_invalid_packs_and_disables_creation(tmp_path, monkeypatch, packs, expected):
+    for name in ("Frame", "Label", "Button", "Menubutton", "Menu", "Canvas", "Scrollbar", "Toplevel"):
+        monkeypatch.setattr(window.tk, name, Widget)
+    monkeypatch.setattr(window.tk, "PhotoImage", Photo)
+    monkeypatch.setattr(window.tk, "StringVar", StringVar)
+    monkeypatch.setattr(window.tk, "OptionMenu", OptionMenu)
+    monkeypatch.setattr(window.tk, "Entry", Entry)
+    monkeypatch.setattr(window, "Thread", DeferredThread)
+    registry = CompanionRegistry(tmp_path / "companions.json", tmp_path / "runtimes")
+    hub = window.HubWindow(Root(), packs, registry, ProcessManager(["companion"], popen=lambda args: Handle()))
+
+    assert hub.current_view == "welcome"
+    assert hub.primary_button["state"] == "disabled"
+    assert expected in hub.status_label["text"]
 
 
 @pytest.mark.parametrize("catalog", ["invalid", "missing"])

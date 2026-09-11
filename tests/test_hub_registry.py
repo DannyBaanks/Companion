@@ -1,3 +1,5 @@
+import pytest
+
 from companion.hub.registry import CompanionRegistry
 
 
@@ -35,3 +37,15 @@ def test_registry_does_not_reuse_runtime_directory_after_registry_recovery(tmp_p
 
     assert second.companion_id == "malbolge-2"
     assert second.runtime_root != first.runtime_root
+
+
+@pytest.mark.parametrize("error", [OSError("disk unavailable"), PermissionError("denied")])
+def test_registry_removes_new_runtime_directory_when_persistence_fails(tmp_path, monkeypatch, error):
+    registry = CompanionRegistry(tmp_path / "companions.json", tmp_path / "runtimes")
+    monkeypatch.setattr(registry, "_save", lambda records: (_ for _ in ()).throw(error))
+
+    with pytest.raises(type(error), match=str(error)):
+        registry.create("Fern", tmp_path / "packs" / "fern")
+
+    assert not (tmp_path / "runtimes" / "fern").exists()
+    assert registry.list() == []

@@ -89,14 +89,20 @@ class HubWindow:
         self.collection = tk.Frame(self.content, bg=_PANEL, padx=16, pady=20)
         self.collection.grid(row=1, column=0, sticky="nsew", padx=(0, 16))
         self.collection.grid_columnconfigure(0, weight=1)
-        self.collection.grid_rowconfigure(2, weight=1)
+        self.collection.grid_rowconfigure(3, weight=1)
         self._label(self.collection, "Your collection", size=14, bold=True).grid(row=0, column=0, sticky="w")
         self._label(self.collection, "A little company, close by.", color=_MUTED, wrap=175).grid(
-            row=1, column=0, sticky="w", pady=(6, 20))
+            row=1, column=0, sticky="w", pady=(6, 12))
+        self.add_companion_button = tk.Button(
+            self.collection, text="Add companion", command=self._open_creation_dialog,
+            bg=_ACCENT, fg="white", activebackground=_INK, activeforeground="white",
+            relief="flat", padx=10, pady=8, font=("Segoe UI", 10, "bold"), cursor="hand2",
+        )
+        self.add_companion_button.grid(row=2, column=0, sticky="ew", pady=(0, 12))
         self.collection_canvas = tk.Canvas(self.collection, bg=_PANEL, highlightthickness=0, width=185)
-        self.collection_canvas.grid(row=2, column=0, sticky="nsew")
+        self.collection_canvas.grid(row=3, column=0, sticky="nsew")
         scrollbar = tk.Scrollbar(self.collection, orient="vertical", command=self.collection_canvas.yview)
-        scrollbar.grid(row=2, column=1, sticky="ns")
+        scrollbar.grid(row=3, column=1, sticky="ns")
         self.collection_canvas.configure(yscrollcommand=scrollbar.set)
         self.cards_frame = tk.Frame(self.collection_canvas, bg=_PANEL)
         self.cards_frame.grid_columnconfigure(0, weight=1)
@@ -244,10 +250,17 @@ class HubWindow:
             has_valid_pack = any(not pack.error for pack in self.packs)
             self.primary_action_text = "Create my companion"
             self.primary_button.configure(text=self.primary_action_text, state="normal" if has_valid_pack else "disabled")
+            self.add_companion_button.configure(state="normal" if has_valid_pack else "disabled")
             self.hide_button.configure(state="disabled")
             self.overflow_button.configure(state="disabled")
-            self.status_label.configure(text="Start with a local visual companion. You can browse your collection anytime.")
-            self.activity_label.configure(text="Choose a local pack to begin.")
+            if not self.packs:
+                message = "No local companion packs were found. Add a valid local pack, then return here to create your companion."
+            elif not has_valid_pack:
+                message = "No valid local companion packs were found. Fix a pack manifest or add a valid local pack, then try again."
+            else:
+                message = "Start with a local visual companion. You can browse your collection anytime."
+            self.status_label.configure(text=message)
+            self.activity_label.configure(text=message)
             self.last_activity_label.configure(text="No activity in this session yet.")
             return
         for cid, card in self.collection_cards.items():
@@ -273,6 +286,8 @@ class HubWindow:
             text = self.primary_action_text
         enabled = bool((valid or (record is None and any(not item.error for item in self.packs))) and self._busy is None)
         self.primary_button.configure(text=self.primary_action_text, state="normal" if enabled else "disabled")
+        self.add_companion_button.configure(
+            state="normal" if any(not item.error for item in self.packs) and self._busy is None else "disabled")
         self.hide_button.configure(state="normal" if enabled and status == ProcessStatus.RUNNING else "disabled")
         self.overflow_menu.entryconfigure(0, state="normal" if enabled and status in (
             ProcessStatus.RUNNING, ProcessStatus.HIDDEN, ProcessStatus.EXITED) else "disabled")
@@ -304,23 +319,37 @@ class HubWindow:
         dialog.configure(bg=_PANEL)
         self._label(dialog, "Choose a local companion", size=15, bold=True).grid(row=0, column=0, columnspan=2, sticky="w")
         self._label(dialog, "Pack", color=_MUTED).grid(row=1, column=0, sticky="w", pady=(16, 8))
-        pack_id = tk.StringVar(value=packs[0].pack_id)
-        tk.OptionMenu(dialog, pack_id, *(pack.pack_id for pack in packs)).grid(row=1, column=1, sticky="ew", pady=(16, 8))
+        pack_ids: dict[str, str] = {}
+        for pack in packs:
+            label = pack.name
+            if label in pack_ids:
+                label = f"{pack.name} ({pack.pack_id})"
+            pack_ids[label] = pack.pack_id
+        pack_choice = tk.StringVar(value=next(iter(pack_ids)))
+        tk.OptionMenu(dialog, pack_choice, *pack_ids).grid(row=1, column=1, sticky="ew", pady=(16, 8))
         self._label(dialog, "Name", color=_MUTED).grid(row=2, column=0, sticky="w", pady=(0, 8))
         name = tk.StringVar(value=packs[0].name)
         entry = tk.Entry(dialog, textvariable=name)
         entry.grid(row=2, column=1, sticky="ew", pady=(0, 8))
+        feedback = self._label(dialog, "", color="#8B2E2E", wrap=300)
+        feedback.hub_role = "creation-feedback"
+        feedback.grid(row=3, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         def create():
             try:
-                self.create_from_pack(pack_id.get(), name.get().strip())
+                self.create_from_pack(pack_ids[pack_choice.get()], name.get().strip())
             except ValueError as exc:
-                messagebox.showerror("Create my companion", str(exc), parent=dialog)
+                feedback.configure(text=str(exc))
+                return
+            except OSError:
+                message = "We couldn’t save your companion. Check the Hub folder permissions and try again."
+                feedback.configure(text=message)
+                self.status_label.configure(text=message)
                 return
             dialog.destroy()
 
         tk.Button(dialog, text="Create my companion", command=create, bg=_ACCENT, fg="white").grid(
-            row=3, column=0, columnspan=2, pady=(12, 0))
+            row=4, column=0, columnspan=2, pady=(12, 0))
         entry.focus_set()
 
     def start_selected(self):
