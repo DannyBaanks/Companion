@@ -1,11 +1,13 @@
 """Composition and entry-point contracts for the local Companion Hub."""
 
 from pathlib import Path
+import runpy
 
 import pytest
 
 from companion import cli
 from companion.hub import main as hub_main
+from companion.hub.registry import CompanionRegistry
 
 
 def make_pack(root: Path) -> Path:
@@ -77,10 +79,19 @@ def test_bundled_packs_dir_uses_checked_in_source_packs(monkeypatch):
 
 def test_runtime_command_uses_sibling_executable_when_frozen(monkeypatch, tmp_path):
     executable = tmp_path / "Companion Hub.exe"
+    (tmp_path / "companion.exe").touch()
     monkeypatch.setattr(hub_main.sys, "frozen", True, raising=False)
     monkeypatch.setattr(hub_main.sys, "executable", str(executable))
 
     assert hub_main.runtime_command() == [str(tmp_path / "companion.exe")]
+
+
+def test_runtime_command_rejects_an_incomplete_frozen_distribution(monkeypatch, tmp_path):
+    monkeypatch.setattr(hub_main.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(hub_main.sys, "executable", str(tmp_path / "Companion Hub.exe"))
+
+    with pytest.raises(RuntimeError, match="companion.exe"):
+        hub_main.runtime_command()
 
 
 def test_runtime_command_uses_the_current_python_in_source(monkeypatch):
@@ -114,3 +125,90 @@ def test_open_hub_creates_local_services_and_opens_one_window(monkeypatch, tmp_p
     assert opened["registry"].path == hub_root / "companions.json"
     assert opened["registry"].runtimes_dir == hub_root / "runtimes"
     assert [pack.pack_id for pack in opened["packs"]] == ["local-cat"]
+
+
+def test_frozen_bundle_snapshot_survives_a_new_pyinstaller_extraction(monkeypatch, tmp_path):
+    hub_root = tmp_path / "Hub data"
+    first_bundle = tmp_path / "first extraction" / "packs"
+    make_pack(first_bundle / "local-cat")
+    monkeypatch.setattr(hub_main.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(hub_main.sys, "_MEIPASS", str(first_bundle.parent), raising=False)
+
+    first_snapshot = hub_main.materialize_bundled_packs(first_bundle, hub_root)
+    registry = CompanionRegistry(hub_root / "companions.json", hub_root / "runtimes")
+    record = registry.create("Mochi", first_snapshot / "local-cat")
+
+    second_bundle = tmp_path / "second extraction" / "packs"
+    make_pack(second_bundle / "local-cat")
+    monkeypatch.setattr(hub_main.sys, "_MEIPASS", str(second_bundle.parent), raising=False)
+    second_snapshot = hub_main.materialize_bundled_packs(second_bundle, hub_root)
+
+    assert second_snapshot == first_snapshot
+    assert record.pack_root == (first_snapshot / "local-cat").resolve()
+    assert (record.pack_root / "manifest.json").is_file()
+    assert str(first_bundle) not in str(record.pack_root)
+
+
+def test_changed_frozen_bundle_uses_a_new_stable_snapshot(monkeypatch, tmp_path):
+    hub_root = tmp_path / "Hub data"
+    first_bundle = tmp_path / "first extraction" / "packs"
+    make_pack(first_bundle / "local-cat")
+    monkeypatch.setattr(hub_main.sys, "frozen", True, raising=False)
+
+    first_snapshot = hub_main.materialize_bundled_packs(first_bundle, hub_root)
+    second_bundle = tmp_path / "second extraction" / "packs"
+    make_pack(second_bundle / "local-cat")
+    (second_bundle / "local-cat" / "idle.ppm").write_text("P3\n1 1\n255\n255 0 0\n", encoding="ascii")
+    second_snapshot = hub_main.materialize_bundled_packs(second_bundle, hub_root)
+
+    assert second_snapshot != first_snapshot
+    assert (first_snapshot / "local-cat" / "idle.ppm").read_text(encoding="ascii").endswith("0 255 0\n")
+    assert (second_snapshot / "local-cat" / "idle.ppm").read_text(encoding="ascii").endswith("255 0 0\n")
+
+
+def test_open_hub_rebinds_frozen_default_packs_to_a_stable_snapshot(monkeypatch, tmp_path):
+    from companion.hub import window
+
+    opened = {}
+
+    class Root:
+        def mainloop(self):
+            pass
+
+    class Window:
+        def __init__(self, root, packs, registry, processes):
+            opened.update(packs=packs, registry=registry, processes=processes)
+
+    bundle_root = tmp_path / "frozen extraction"
+    packs_dir = bundle_root / "packs"
+    make_pack(packs_dir / "local-cat")
+    (tmp_path / "companion.exe").touch()
+    monkeypatch.setattr(hub_main.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(hub_main.sys, "_MEIPASS", str(bundle_root), raising=False)
+    monkeypatch.setattr(hub_main.sys, "executable", str(tmp_path / "Companion Hub.exe"))
+    monkeypatch.setattr("tkinter.Tk", Root)
+    monkeypatch.setattr(window, "HubWindow", Window)
+
+    hub_root = tmp_path / "Hub data"
+    hub_main.open_hub(hub_root=hub_root, packs_dir=packs_dir)
+
+    assert opened["packs"][0].root.is_relative_to(hub_root / "bundled-packs")
+
+
+@pytest.mark.parametrize(
+    ("entry_name", "module", "attribute"),
+    [
+        ("companion_cli.py", cli, "main"),
+        ("companion_hub.py", hub_main, "main"),
+    ],
+)
+def test_pyinstaller_entry_wrappers_call_the_package_main(monkeypatch, entry_name, module, attribute):
+    called = []
+    monkeypatch.setattr(module, attribute, lambda: called.append(True) or 0)
+    entry = Path(__file__).resolve().parents[1] / "src" / entry_name
+
+    with pytest.raises(SystemExit) as result:
+        runpy.run_path(entry, run_name="__main__")
+
+    assert result.value.code == 0
+    assert called == [True]

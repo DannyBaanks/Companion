@@ -10,12 +10,12 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $ProjectRoot
 try {
-    if ($Target -in @("all", "cli")) {
-        py -m PyInstaller --noconfirm --clean --onefile --name companion --paths src src/companion/cli.py
+    if ($Target -in @("all", "cli", "hub")) {
+        py -m PyInstaller --noconfirm --clean --onefile --name companion --paths src --add-data "packs;packs" src/companion_cli.py
         Write-Output "dist\companion.exe ready. Run: .\dist\companion.exe doctor"
     }
     if ($Target -in @("all", "hub")) {
-        py -m PyInstaller --noconfirm --clean --onefile --windowed --name "Companion Hub" --paths src --add-data "packs;packs" src/companion/hub/main.py
+        py -m PyInstaller --noconfirm --clean --onefile --windowed --name "Companion Hub" --paths src --add-data "packs;packs" src/companion_hub.py
         Write-Output "dist\Companion Hub.exe ready. Run: .\dist\Companion Hub.exe"
     }
 }

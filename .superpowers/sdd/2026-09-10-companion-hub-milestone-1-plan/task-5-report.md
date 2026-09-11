@@ -54,3 +54,52 @@ desktop window during automated verification.
 ## Commit
 
 Implementation commit: this report is committed with the Task 5 implementation.
+
+## Review round 1: durable frozen packs and self-contained distribution
+
+### Root causes
+
+- Frozen Hub discovery passed `sys._MEIPASS/packs` directly into persisted
+  companion records. PyInstaller removes that extraction location after exit,
+  leaving later pet launches without their pack assets.
+- The `hub` build target created only `Companion Hub.exe`, while a frozen Hub
+  launches a sibling `companion.exe` for pet processes. The CLI target also did
+  not include packs, so `companion.exe hub` could not use default packs.
+- PyInstaller treated `src/companion/cli.py` and `src/companion/hub/main.py`
+  as top-level scripts, which broke their relative imports in frozen builds.
+
+### Fixes
+
+- Frozen bundled packs are copied to immutable, content-addressed snapshots
+  under `<hub-root>/bundled-packs/<sha256>`. An unchanged bundle extracted to a
+  different temporary directory resolves to the same stable snapshot; changed
+  content receives a new snapshot while prior companion records retain their
+  old stable assets.
+- A frozen Hub validates that `companion.exe` is present beside itself before
+  opening. `-Target hub` now builds the CLI runtime first and then the Hub; both
+  artifacts include bundled packs.
+- Added top-level PyInstaller wrapper scripts that import the established
+  package entry points absolutely, eliminating relative-import failures.
+
+### Evidence
+
+- Red: `py -m pytest tests/test_hub_cli.py -q` — 4 failed, covering missing
+  frozen runtime validation, missing stable materialization, and the persisted
+  extraction-root path.
+- Green after the composition fix: `py -m pytest tests/test_hub_cli.py -q` —
+  13 passed.
+- Artifact red: the first clean frozen smoke failed in `companion.exe` with
+  `ImportError: attempted relative import with no known parent package`.
+- Wrapper red: the new wrapper tests failed with `FileNotFoundError` before
+  the wrappers were added.
+- Green after wrapper/build changes: `py -m pytest tests/test_hub_cli.py -q` —
+  15 passed.
+- Clean packaging: `powershell -NoProfile -ExecutionPolicy Bypass -File
+  tools\build_exe.ps1 -Target hub` completed with PyInstaller 6.22.0 and
+  produced `dist\companion.exe` (13,616,094 bytes) plus
+  `dist\Companion Hub.exe` (13,531,708 bytes).
+- Frozen entry smoke: `dist\companion.exe hub --help` printed Hub usage; the
+  windowed `dist\Companion Hub.exe --help` exited 0 when run hidden.
+- Full regression: `py -m pytest -q` — 139 passed, with the same existing
+  asyncio deprecation warning in `tests/test_adapters.py`.
+- `py -m compileall -q src` and `git diff --check` — passed.
