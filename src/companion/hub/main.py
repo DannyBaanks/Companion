@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
+import os
 from pathlib import Path
 import shutil
 import stat
@@ -13,6 +15,7 @@ import time
 import uuid
 
 from ..paths import default_data_dir
+from ..storage import atomic_write_json
 from .discovery import discover_packs
 from .processes import ProcessManager
 from .registry import CompanionRegistry
@@ -79,7 +82,85 @@ def _remove_owned_path(path: Path) -> None:
         path.unlink()
 
 
-def _acquire_snapshot_lock(snapshot_root: Path, expected_digest: str) -> Path | None:
+_LOCK_LEASE_SECONDS = 30
+_LOCK_OWNER_FILE = "owner.json"
+
+
+def _pid_is_alive(pid: object) -> bool:
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _read_lock_owner(lock: Path) -> dict[str, object] | None:
+    try:
+        payload = json.loads((lock / _LOCK_OWNER_FILE).read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _lock_is_reclaimable(lock: Path) -> bool:
+    """Return whether an expired lock has no live local owner."""
+    owner = _read_lock_owner(lock)
+    now = time.time()
+    if owner is not None:
+        expiry = owner.get("lease_expires_at")
+        if isinstance(expiry, (int, float)) and now < expiry:
+            return False
+        return not _pid_is_alive(owner.get("pid"))
+    try:
+        return now - lock.stat().st_mtime >= _LOCK_LEASE_SECONDS
+    except FileNotFoundError:
+        return False
+
+
+def _write_lock_owner(lock: Path, owner_id: str) -> None:
+    atomic_write_json(
+        lock / _LOCK_OWNER_FILE,
+        {
+            "owner_id": owner_id,
+            "pid": os.getpid(),
+            "lease_expires_at": time.time() + _LOCK_LEASE_SECONDS,
+        },
+    )
+
+
+def _reclaim_snapshot_lock(lock: Path) -> bool:
+    """Atomically retire a stale lock without touching a live owner's lock."""
+    if not _lock_is_reclaimable(lock) or not _lock_is_reclaimable(lock):
+        return False
+    reclaimed = lock.parent / f".reclaimed-{lock.name}-{uuid.uuid4().hex}"
+    try:
+        lock.replace(reclaimed)
+    except OSError:
+        if not _path_exists(lock):
+            return True
+        if _lock_is_reclaimable(lock):
+            raise
+        return False
+    _remove_owned_path(reclaimed)
+    return True
+
+
+def _release_snapshot_lock(lock: Path, owner_id: str) -> None:
+    owner = _read_lock_owner(lock)
+    if owner is None or owner.get("owner_id") != owner_id:
+        return
+    try:
+        (lock / _LOCK_OWNER_FILE).unlink()
+        lock.rmdir()
+    except FileNotFoundError:
+        return
+
+
+def _acquire_snapshot_lock(snapshot_root: Path, expected_digest: str) -> tuple[Path, str] | None:
     """Serialize cooperating Hub starts while a snapshot is repaired."""
     locks_root = snapshot_root / ".locks"
     locks_root.mkdir(exist_ok=True)
@@ -88,10 +169,14 @@ def _acquire_snapshot_lock(snapshot_root: Path, expected_digest: str) -> Path | 
     while True:
         try:
             lock.mkdir()
-            return lock
+            owner_id = uuid.uuid4().hex
+            _write_lock_owner(lock, owner_id)
+            return lock, owner_id
         except FileExistsError:
             if _snapshot_matches(snapshot_root / expected_digest, expected_digest):
                 return None
+            if _reclaim_snapshot_lock(lock):
+                continue
             if time.monotonic() >= deadline:
                 raise RuntimeError("Timed out waiting for another Companion Hub to publish bundled packs.")
             time.sleep(0.02)
@@ -136,11 +221,12 @@ def materialize_bundled_packs(packs_dir: Path, hub_root: Path) -> Path:
         return snapshot
 
     snapshot_root.mkdir(parents=True, exist_ok=True)
-    lock = _acquire_snapshot_lock(snapshot_root, expected_digest)
-    if lock is None:
+    acquired_lock = _acquire_snapshot_lock(snapshot_root, expected_digest)
+    if acquired_lock is None:
         if _snapshot_matches(snapshot, expected_digest):
             return snapshot
         raise RuntimeError("Bundled pack publication completed without a valid snapshot.")
+    lock, owner_id = acquired_lock
     try:
         if _snapshot_matches(snapshot, expected_digest):
             return snapshot
@@ -169,7 +255,7 @@ def materialize_bundled_packs(packs_dir: Path, hub_root: Path) -> Path:
                     _remove_owned_path(backup)
         raise RuntimeError("Companion Hub could not repair its bundled pack snapshot.")
     finally:
-        lock.rmdir()
+        _release_snapshot_lock(lock, owner_id)
 
 
 def _is_ephemeral_bundle_path(packs_dir: Path) -> bool:

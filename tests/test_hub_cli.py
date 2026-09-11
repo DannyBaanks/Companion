@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+import json
 import runpy
 import shutil
 
@@ -199,6 +200,37 @@ def test_concurrent_snapshot_publication_leaves_one_verified_snapshot(monkeypatc
     assert hub_main._directory_digest(snapshots[0]) == snapshots[0].name
     assert not list((hub_root / "bundled-packs").glob("bundled-packs-*"))
     assert not list((hub_root / "bundled-packs").glob(".backup-*"))
+
+
+def test_abandoned_snapshot_lock_is_reclaimed_before_repair(monkeypatch, tmp_path):
+    hub_root = tmp_path / "Hub data"
+    bundle = tmp_path / "frozen extraction" / "packs"
+    make_pack(bundle / "local-cat")
+    expected = hub_main._directory_digest(bundle)
+    lock = hub_root / "bundled-packs" / ".locks" / expected
+    lock.mkdir(parents=True)
+    (lock / "owner.json").write_text(
+        json.dumps({"owner_id": "crashed", "pid": 991, "lease_expires_at": 0}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(hub_main, "_pid_is_alive", lambda pid: False)
+
+    snapshot = hub_main.materialize_bundled_packs(bundle, hub_root)
+
+    assert hub_main._directory_digest(snapshot) == expected
+    assert not lock.exists()
+
+
+def test_expired_lock_with_a_live_owner_is_not_reclaimable(monkeypatch, tmp_path):
+    lock = tmp_path / "lock"
+    lock.mkdir()
+    (lock / "owner.json").write_text(
+        json.dumps({"owner_id": "live", "pid": 992, "lease_expires_at": 0}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(hub_main, "_pid_is_alive", lambda pid: True)
+
+    assert hub_main._lock_is_reclaimable(lock) is False
 
 
 def test_publication_collision_accepts_only_a_verified_winner(monkeypatch, tmp_path):

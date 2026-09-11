@@ -43,6 +43,18 @@
   deprecation warning in `tests/test_adapters.py`.
 - `py -m compileall -q src` and `git diff --check` — passed.
 
+### Fix round 2/3 — crash-safe snapshot publication lock
+
+- Snapshot publication locks now record an owner PID, unique owner ID, and
+  bounded lease. Expired locks are reclaimed only when the recorded owner is
+  no longer alive; live owners are left untouched.
+- Added deterministic coverage for abandoned-lock recovery and for refusing
+  to reclaim an expired lock whose owner is still alive.
+- Focused Hub CLI/materialization tests: `21 passed`.
+- Full regression: `py -m pytest -q` — `145 passed`, with the same existing
+  asyncio deprecation warning in `tests/test_adapters.py`.
+- `py -m compileall -q src` and `git diff --check` — passed.
+
 ## Review round 2: verified snapshot repair and publication races
 
 The prior snapshot logic trusted a directory solely because its name matched
