@@ -14,6 +14,18 @@ from .pack import AssetPack, PackError
 from .queue import append_jsonl
 from .runtime import Runtime
 from .scheduled import LocalScheduler, ReminderError, ReminderStore
+from .tokens import Theme, get_theme
+
+
+# ── Glow canvas helpers ──────────────────────────────────────────────────────
+
+def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+    h = hex_color.lstrip("#")
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _lerp_color(c1: tuple[int, int, int], c2: tuple[int, int, int], t: float) -> tuple[int, int, int]:
+    return tuple(int(a + (b - a) * t) for a, b in zip(c1, c2))  # type: ignore[return-value]
 
 
 class AnimatedAsset:
@@ -118,7 +130,12 @@ class AnimatedAsset:
         self._last_time = self.clock()
 
 
+# ── Desktop window ───────────────────────────────────────────────────────────
+
 class DesktopWindow:
+    # Glow render size (doubled for canvas)
+    _GLOW_R = 48
+
     def __init__(
         self,
         runtime: Runtime,
@@ -130,22 +147,26 @@ class DesktopWindow:
         opacity: float = 1.0,
         show_messages: bool = True,
         pack_name: str | None = None,
+        theme: Theme | None = None,
     ):
         self.runtime = runtime
         self.name = name
         self.opacity = max(0.35, min(1.0, float(opacity)))
         self.show_messages = show_messages
+        self.theme = theme or get_theme("dark")
         self.reminders = ReminderStore(runtime.root / "reminders.json")
         self.scheduler = LocalScheduler(self.reminders, runtime.inbox)
         self.reminder_panel: ReminderPanel | None = None
+        self._last_glow_state: str | None = None
+
         self.root = tk.Tk()
         self.root.title(name)
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", topmost)
-        self.root.configure(bg="magenta")
+        self.root.configure(bg=self.theme.bg_stage)
         if platform_name() == "windows":
             try:
-                self.root.wm_attributes("-transparentcolor", "magenta")
+                self.root.wm_attributes("-transparentcolor", self.theme.bg_stage)
             except tk.TclError:
                 pass
         try:
@@ -165,48 +186,107 @@ class DesktopWindow:
             self.image = AnimatedAsset(self.image_path) if self.image_path else None
         except (OSError, ValueError, tk.TclError):
             self.image = None
-        self.image_label = tk.Label(self.root, bg="magenta", fg="#a9ffcb", bd=0, highlightthickness=0)
+
+        # Glow canvas behind the sprite
+        glow_size = self._GLOW_R * 2
+        self.glow_canvas = tk.Canvas(
+            self.root, width=glow_size, height=glow_size,
+            bg=self.theme.bg_stage, highlightthickness=0,
+        )
+        self._glow_oval: int | None = None
+
+        self.image_label = tk.Label(
+            self.root,
+            bg=self.theme.bg_stage,
+            fg=self.theme.fg_accent,
+            bd=0,
+            highlightthickness=0,
+        )
+        self.glow_canvas.pack()
         self.image_label.pack()
+
         self._scale = 1.0
         self._menu_open = False
         self.bubble = tk.Label(
             self.root,
             text="",
-            bg="#10151b",
-            fg="#a9ffcb",
-            padx=8,
-            pady=5,
+            bg=self.theme.bg_bubble,
+            fg=self.theme.fg_bubble,
+            padx=self.theme.spacing.lg,
+            pady=self.theme.spacing.sm,
             wraplength=260,
             justify="left",
+            relief="solid",
+            borderwidth=1,
         )
-        self.control_error = tk.Label(self.root, text="", bg="#10151b", fg="#ffadad", padx=6, pady=3)
+        self.control_error = tk.Label(
+            self.root,
+            text="",
+            bg=self.theme.bg_bubble,
+            fg=self.theme.states["error"].accent,
+            padx=self.theme.spacing.sm,
+            pady=self.theme.spacing.xs,
+        )
         self.messages_var = tk.BooleanVar(value=show_messages)
         self.context_menu = self._build_context_menu()
         self._drag_origin: tuple[int, int] | None = None
         self._dragged = False
         self._refresh()
 
+    # ── Sectioned context menu (M12) ────────────────────────────────────
+
+    def _make_submenu(self, parent: tk.Menu) -> tk.Menu:
+        t = self.theme
+        return tk.Menu(parent, tearoff=False, bg=t.bg_menu, fg=t.fg_primary,
+                       activebackground=t.bg_menu_hover, activeforeground=t.fg_primary,
+                       disabledforeground=t.bg_menu_disabled)
+
     def _build_context_menu(self) -> tk.Menu:
-        menu = tk.Menu(self.root, tearoff=False)
-        state_menu = tk.Menu(menu, tearoff=False)
+        t = self.theme
+        menu = tk.Menu(self.root, tearoff=False, bg=t.bg_menu, fg=t.fg_primary,
+                       activebackground=t.bg_menu_hover, activeforeground=t.fg_primary,
+                       disabledforeground=t.bg_menu_disabled)
+
+        # ── Companion section ────────────────────────────────────────────
+        state_menu = self._make_submenu(menu)
         for value in sorted(STATES):
-            state_menu.add_command(label=value, command=lambda value=value: self.set_state(value))
-        menu.add_cascade(label="State", menu=state_menu)
+            sv = t.states.get(value)
+            label = f"{sv.icon}  {value}" if sv else value
+            state_menu.add_command(label=label, command=lambda v=value: self.set_state(v))
+        menu.add_cascade(label="Companion  \u25b6  State", menu=state_menu)
 
-        position_menu = tk.Menu(menu, tearoff=False)
-        for value in sorted(POSITIONS):
-            position_menu.add_command(label=value, command=lambda value=value: self.set_position(value))
-        menu.add_cascade(label="Position", menu=position_menu)
+        theme_menu = self._make_submenu(menu)
+        for name in ("dark", "light", "soft-neon"):
+            prefix = "\u2713 " if t.name == name else "   "
+            theme_menu.add_command(label=f"{prefix}{name}", command=lambda n=name: self.set_theme(n))
+        menu.add_cascade(label="Companion  \u25b6  Theme", menu=theme_menu)
 
-        opacity_menu = tk.Menu(menu, tearoff=False)
-        for label, value in (("35%", 0.35), ("50%", 0.5), ("75%", 0.75), ("100%", 1.0)):
-            opacity_menu.add_command(label=label, command=lambda value=value: self.set_opacity(value))
-        menu.add_cascade(label="Opacity", menu=opacity_menu)
         menu.add_checkbutton(label="Show messages", variable=self.messages_var, command=self.toggle_messages)
-        menu.add_command(label="Reload pack", command=self.reload_pack)
-        menu.add_command(label="Choose pack...", command=self.choose_pack)
         menu.add_separator()
-        menu.add_command(label="Reminders...", command=self.open_reminders)
+
+        # ── Window section ───────────────────────────────────────────────
+        position_menu = self._make_submenu(menu)
+        for value in sorted(POSITIONS):
+            position_menu.add_command(label=value, command=lambda v=value: self.set_position(v))
+        menu.add_cascade(label="Window  \u25b6  Position", menu=position_menu)
+
+        opacity_menu = self._make_submenu(menu)
+        for label, value in (("35%", 0.35), ("50%", 0.5), ("75%", 0.75), ("100%", 1.0)):
+            opacity_menu.add_command(label=label, command=lambda v=value: self.set_opacity(v))
+        menu.add_cascade(label="Window  \u25b6  Opacity", menu=opacity_menu)
+        menu.add_separator()
+
+        # ── Runtime section ──────────────────────────────────────────────
+        menu.add_command(label="Reload pack", command=self.reload_pack)
+        menu.add_command(label="Choose pack\u2026", command=self.choose_pack)
+        menu.add_separator()
+
+        # ── System section ───────────────────────────────────────────────
+        menu.add_command(label="Reminders\u2026", command=self.open_reminders)
+        menu.add_separator()
+
+        # ── Exit ─────────────────────────────────────────────────────────
+        menu.add_command(label="Close", command=self.close)
         return menu
 
     def close(self) -> None:
@@ -284,6 +364,25 @@ class DesktopWindow:
             self.root.attributes("-alpha", self.opacity)
         except tk.TclError:
             pass
+
+    def set_theme(self, name: str) -> None:
+        """Switch the presentation theme at runtime."""
+        self.theme = get_theme(name)
+        self._last_glow_state = None  # force glow redraw
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        """Push current theme colors into every widget."""
+        t = self.theme
+        self.root.configure(bg=t.bg_stage)
+        self.glow_canvas.configure(bg=t.bg_stage)
+        self.image_label.configure(bg=t.bg_stage, fg=t.fg_accent)
+        self.bubble.configure(bg=t.bg_bubble, fg=t.fg_bubble,
+                              padx=t.spacing.lg, pady=t.spacing.sm)
+        self.control_error.configure(bg=t.bg_bubble, fg=t.states["error"].accent,
+                                     padx=t.spacing.sm, pady=t.spacing.xs)
+        # Rebuild the context menu with new colors
+        self.context_menu = self._build_context_menu()
 
     def toggle_messages(self) -> bool:
         self.show_messages = not self.show_messages
@@ -365,10 +464,44 @@ class DesktopWindow:
             x, y = coordinates[position]
             self.root.geometry(f"+{max(0, x)}+{max(0, y)}")
 
+    # ── Glow rendering ──────────────────────────────────────────────────
+
+    def _draw_glow(self, state_name: str) -> None:
+        """Draw a soft glow circle behind the companion sprite."""
+        if self._last_glow_state == state_name:
+            return
+        self._last_glow_state = state_name
+        t = self.theme
+        sv = t.states.get(state_name)
+        if sv is None:
+            return
+        glow_color = sv.glow[3]  # "#rrggbbaa"
+        if glow_color.endswith("00"):
+            return  # fully transparent → skip
+        r = self._GLOW_R
+        self.glow_canvas.delete("glow")
+        # Outer glow ring
+        self._glow_oval = self.glow_canvas.create_oval(
+            4, 4, r * 2 - 4, r * 2 - 4,
+            fill="", outline=glow_color, width=3,
+            tags="glow",
+        )
+        # Subtle fill
+        self.glow_canvas.create_oval(
+            12, 12, r * 2 - 12, r * 2 - 12,
+            fill=glow_color, outline="",
+            tags="glow",
+        )
+
+    # ── Refresh loop ────────────────────────────────────────────────────
+
     def _refresh(self) -> None:
         self.scheduler.tick()
         self.runtime.process_once()
         state = self.runtime.state
+        t = self.theme
+
+        # Update image asset if state changed
         next_image_path = self.pack.animation_for(state=state["state"], mood=state.get("mood")) if self.pack else self.image_path
         if next_image_path is not None and next_image_path != self.image_path and next_image_path.exists():
             self.image_path = next_image_path
@@ -378,14 +511,29 @@ class DesktopWindow:
                 self.image_path = next_image_path
             except (OSError, ValueError, tk.TclError):
                 self._show_control_error(f"Could not load asset: {next_image_path.name}")
+
         if self.image:
             self._render_current_frame()
             self.image.advance()
         else:
-            self.image_label.configure(image="", text=f"{self.name}\n[{state['state']}]", padx=12, pady=12)
+            # Accessible fallback: show name + state + icon
+            sv = t.states.get(state["state"])
+            icon = sv.icon if sv else ""
+            self.image_label.configure(
+                image="",
+                text=f"{self.name}\n{icon} [{state['state']}]",
+                padx=t.spacing.lg,
+                pady=t.spacing.lg,
+            )
+
+        # Glow updates
+        self._draw_glow(state["state"])
+
         self.root.withdraw() if not state["visible"] else self.root.deiconify()
         if not self._dragged:
             self._place(state["position"])
+
+        # Message bubble
         message = state.get("message")
         if self.show_messages and state["visible"] and message and message.get("text"):
             self.bubble.configure(text=message["text"])
@@ -393,7 +541,8 @@ class DesktopWindow:
                 self.bubble.pack()
         elif self.bubble.winfo_ismapped():
             self.bubble.pack_forget()
-        self.root.after(100, self._refresh)
+
+        self.root.after(t.motion.poll_ms, self._refresh)
 
     def show(self) -> None:
         self.root.mainloop()
@@ -415,6 +564,7 @@ def launch(
     opacity: float = 1.0,
     show_messages: bool = True,
     pack_name: str | None = None,
+    theme: Theme | None = None,
 ) -> None:
     DesktopWindow(
         runtime,
@@ -425,6 +575,7 @@ def launch(
         opacity=opacity,
         show_messages=show_messages,
         pack_name=pack_name,
+        theme=theme,
     ).show()
 
 
@@ -453,6 +604,30 @@ class ReminderPanel:
         self.listbox = tk.Listbox(frame, width=52, height=6)
         self.listbox.grid(row=4, column=0, columnspan=2, pady=(8, 0))
         tk.Button(frame, text="Cancel selected", command=self.cancel_selected).grid(row=4, column=2, padx=(8, 0), sticky="n")
+        self.refresh()
+
+    def save(self) -> None:
+        try:
+            self.store.create(due_at=self.when.get(), message=self.message.get())
+        except ReminderError as exc:
+            self.error.configure(text=str(exc))
+            return
+        self.error.configure(text="")
+        self.message.delete(0, tk.END)
+        self.refresh()
+
+    def refresh(self) -> None:
+        self.listbox.delete(0, tk.END)
+        for reminder in self.store.list(status="pending"):
+            due = reminder.due_at.replace("T", " ")[:16]
+            self.listbox.insert(tk.END, f"{due}  {reminder.message}")
+
+    def cancel_selected(self) -> None:
+        selection = self.listbox.curselection()
+        if not selection:
+            return
+        pending = self.store.list(status="pending")
+        self.store.cancel(pending[selection[0]].id)
         self.refresh()
 
     def save(self) -> None:

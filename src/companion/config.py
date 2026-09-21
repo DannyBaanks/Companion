@@ -21,6 +21,7 @@ class CompanionConfig:
     topmost: bool = True
     opacity: float = 1.0
     show_messages: bool = True
+    theme: str = "dark"
 
 
 def load_config(path: Path) -> CompanionConfig:
@@ -49,4 +50,5 @@ def load_config(path: Path) -> CompanionConfig:
         topmost=bool(window.get("topmost", True)),
         opacity=float(window.get("opacity", 1.0)),
         show_messages=bool(window.get("show_messages", True)),
+        theme=str(values.get("theme", "dark")),
     )

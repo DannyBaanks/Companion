@@ -15,6 +15,7 @@ class FakeRoot:
         self.attribute_calls = []
         self.geometry_calls = []
         self.destroyed = False
+        self._bg = "magenta"
 
     def title(self, _value):
         pass
@@ -28,7 +29,7 @@ class FakeRoot:
     wm_attributes = attributes
 
     def configure(self, **_values):
-        pass
+        self._bg = _values.get("bg", self._bg)
 
     def bind(self, sequence, callback):
         self.bindings[sequence] = callback
@@ -110,7 +111,7 @@ class FakeBooleanVar:
 
 
 class FakeMenu:
-    def __init__(self, _parent, *, tearoff=False):
+    def __init__(self, _parent, *, tearoff=False, **_kw):
         self.tearoff = tearoff
         self.entries = []
         self.popup = None
@@ -137,11 +138,36 @@ class FakeMenu:
         self.released = True
 
 
+class FakeCanvas:
+    def __init__(self, parent, **kw):
+        self.parent = parent
+        self.kw = kw
+        self._items = []
+        self._tag_counter = 0
+
+    def pack(self, **_kw):
+        pass
+
+    def configure(self, **kw):
+        self.kw.update(kw)
+
+    def create_oval(self, x1, y1, x2, y2, *, fill="", outline="", width=1, tags=""):
+        self._tag_counter += 1
+        item_id = self._tag_counter
+        self._items.append({"id": item_id, "type": "oval", "coords": (x1, y1, x2, y2),
+                            "fill": fill, "outline": outline, "width": width, "tags": tags})
+        return item_id
+
+    def delete(self, tag):
+        self._items = [i for i in self._items if i["tags"] != tag]
+
+
 def make_window(monkeypatch, tmp_path: Path, **options):
     monkeypatch.setattr("companion.window.tk.Tk", FakeRoot)
     monkeypatch.setattr("companion.window.tk.Label", FakeLabel)
     monkeypatch.setattr("companion.window.tk.BooleanVar", FakeBooleanVar)
     monkeypatch.setattr("companion.window.tk.Menu", FakeMenu)
+    monkeypatch.setattr("companion.window.tk.Canvas", FakeCanvas)
     runtime = Runtime(tmp_path / "runtime")
     return DesktopWindow(runtime, **options)
 
@@ -270,8 +296,13 @@ def test_context_menu_exposes_all_runtime_states_and_positions(monkeypatch, tmp_
         for entry in window.context_menu.entries
         if entry[0] == "cascade"
     }
-    assert {entry[1]["label"] for entry in cascades["State"].entries} == STATES
-    assert {entry[1]["label"] for entry in cascades["Position"].entries} == POSITIONS
+    # M12: sectioned labels — "Companion  ▶  State" and "Window  ▶  Position"
+    state_labels = {entry[1]["label"] for entry in cascades.get("Companion  \u25b6  State", FakeMenu(None)).entries}
+    position_labels = {entry[1]["label"] for entry in cascades.get("Window  \u25b6  Position", FakeMenu(None)).entries}
+    # State labels now include icon prefix, so extract the state name after the icon
+    state_values = {label.split("  ")[-1].strip() for label in state_labels}
+    assert state_values == STATES
+    assert position_labels == POSITIONS
 
 
 def test_state_and_position_controls_use_runtime_event_path(monkeypatch, tmp_path):
@@ -343,3 +374,86 @@ def test_reload_pack_reloads_manifest_without_writing_pack(monkeypatch, tmp_path
     assert window.pack is not pack
     assert window.pack_name == "Configured Cat"
     assert manifest.read_text(encoding="utf-8") == before
+
+
+# ── M11: Glow and theme tests ────────────────────────────────────────────────
+
+def test_glow_canvas_is_created(monkeypatch, tmp_path):
+    window = make_window(monkeypatch, tmp_path)
+    assert hasattr(window, "glow_canvas")
+    assert window.glow_canvas.kw["bg"] == window.theme.bg_stage
+
+
+def test_draw_glow_creates_ovals(monkeypatch, tmp_path):
+    window = make_window(monkeypatch, tmp_path)
+    window._draw_glow("idle")
+    ovals = [i for i in window.glow_canvas._items if i["type"] == "oval"]
+    assert len(ovals) == 2  # outer ring + inner fill
+    assert window._last_glow_state == "idle"
+
+
+def test_draw_glow_skips_if_same_state(monkeypatch, tmp_path):
+    window = make_window(monkeypatch, tmp_path)
+    window._draw_glow("idle")
+    count_before = len(window.glow_canvas._items)
+    window._draw_glow("idle")  # same state → no new items
+    assert len(window.glow_canvas._items) == count_before
+
+
+def test_draw_glow_clears_previous_on_state_change(monkeypatch, tmp_path):
+    window = make_window(monkeypatch, tmp_path)
+    window._draw_glow("idle")
+    assert any(i["tags"] == "glow" for i in window.glow_canvas._items)
+    window._draw_glow("error")
+    old_items = [i for i in window.glow_canvas._items if i["tags"] == "glow"]
+    assert len(old_items) == 2  # new glow for error
+
+
+def test_set_theme_switches_and_rebuilds_menu(monkeypatch, tmp_path):
+    window = make_window(monkeypatch, tmp_path)
+    old_menu = window.context_menu
+    window.set_theme("soft-neon")
+    assert window.theme.name == "soft-neon"
+    assert window.context_menu is not old_menu  # rebuilt
+    assert window._last_glow_state is None  # forces redraw
+
+
+def test_sectioned_menu_has_expected_labels(monkeypatch, tmp_path):
+    window = make_window(monkeypatch, tmp_path)
+    labels = [
+        entry[1].get("label", "")
+        for entry in window.context_menu.entries
+        if entry[0] == "cascade"
+    ]
+    # Companion section
+    assert any("Companion" in l and "State" in l for l in labels)
+    assert any("Companion" in l and "Theme" in l for l in labels)
+    # Window section
+    assert any("Window" in l and "Position" in l for l in labels)
+    assert any("Window" in l and "Opacity" in l for l in labels)
+
+
+def test_close_command_exists_in_menu(monkeypatch, tmp_path):
+    window = make_window(monkeypatch, tmp_path)
+    command_labels = [
+        entry[1].get("label", "")
+        for entry in window.context_menu.entries
+        if entry[0] == "command"
+    ]
+    assert "Close" in command_labels
+
+
+def test_theme_checkbutton_reflects_current(monkeypatch, tmp_path):
+    """Theme submenu shows checkmark next to current theme."""
+    from companion.tokens import DARK
+    window = make_window(monkeypatch, tmp_path)
+    # Find the Theme cascade
+    for entry in window.context_menu.entries:
+        if entry[0] == "cascade" and "Theme" in entry[1].get("label", ""):
+            submenu = entry[1]["menu"]
+            labels = [e[1].get("label", "") for e in submenu.entries]
+            # dark should have ✓ prefix
+            assert any("dark" in l and "\u2713" in l for l in labels)
+            break
+    else:
+        raise AssertionError("Theme cascade not found")

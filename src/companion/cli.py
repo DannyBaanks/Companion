@@ -18,6 +18,7 @@ from .queue import append_jsonl
 from .render_request import RenderRequestError, load_render_request
 from .runtime import Runtime
 from .scheduled import LocalScheduler, ReminderError, ReminderStore, local_now, parse_in_duration
+from .tokens import get_theme
 from .window import launch
 from .adapters.hooks import forward_stream
 from .adapters.notify import notify
@@ -89,6 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
     gui.add_argument("--name", default="Companion")
     gui.add_argument("--pack", type=Path)
     gui.add_argument("--config", type=Path)
+    gui.add_argument("--theme", default=None, help="presentation theme: dark, light, soft-neon")
     pack = sub.add_parser("pack")
     pack_sub = pack.add_subparsers(dest="pack_command", required=True)
     validate = pack_sub.add_parser("validate")
@@ -98,6 +100,8 @@ def build_parser() -> argparse.ArgumentParser:
     render_request_validate = render_request_sub.add_parser("validate")
     render_request_validate.add_argument("path", type=Path)
     sub.add_parser("hook", help="forward canonical JSONL events from stdin")
+    hub = sub.add_parser("hub", help="open the Companion Hub window")
+    hub.add_argument("--theme", default=None, help="presentation theme: dark, light, soft-neon")
     return parser
 
 
@@ -263,6 +267,7 @@ def main(argv: list[str] | None = None) -> int:
             opacity=config.opacity if config else 1.0,
             show_messages=config.show_messages if config else True,
             pack_name=config.pack_name if config else None,
+            theme=get_theme(args.theme or (config.theme if config else "dark")),
         )
         return 0
     if args.command == "pack":
@@ -275,6 +280,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "hook":
         forward_stream(sys.stdin, runtime.inbox, sys.stdout)
+        return 0
+    if args.command == "hub":
+        from .hub_window import launch_hub
+        launch_hub(root, theme=get_theme(args.theme or "dark"))
         return 0
     event_type = args.command
     fields = {}
