@@ -1,17 +1,20 @@
-# Companion Roadmap
+# Roadmap de Companion
 
 This roadmap is the current project plan. The public name is intentionally
 left undecided until the product shape is stable.
 
-## Product boundary
+## Límite del producto
 
-An open local desktop companion for agents, CLIs, reminders, and other local
-processes. The companion renders generic semantic events; it does not contain
-AI, cloud services, accounts, or calendar synchronization. Future onboarding
-recipes may propose local installation/configuration commands, but only after
-showing them to the user and receiving explicit confirmation.
+Una mascota virtual de escritorio, abierta y local. Companion presenta eventos
+semánticos, animaciones, mensajes, reminders y personalidad configurable. Los
+agentes, CLIs y procesos locales son integraciones opcionales, no la identidad
+principal del producto.
 
-## Completed
+Companion no contiene IA, servicios cloud, cuentas ni sincronización de
+calendario. Las recipes futuras pueden proponer comandos locales, pero solo
+después de mostrar la acción exacta y recibir confirmación explícita.
+
+## Completado
 
 ### M0. Event protocol
 
@@ -46,7 +49,7 @@ showing them to the user and receiving explicit confirmation.
 - [x] Small GUI editor and pending-reminder list.
 - [x] Deterministic fake-clock tests.
 
-## Next milestones
+## Próximos milestones
 
 ### M4. Companion packs and configuration
 
@@ -111,76 +114,120 @@ Release: **Open Agent Companion 1.0.0 (MIT)**, command `companion`,
 package `open-agent-companion`. See `CHANGELOG.md`, `LICENSE`,
 `CONTRIBUTING.md`, `SECURITY.md`, `examples/`, and `.github/workflows/ci.yml`.
 
-## Companion Hub roadmap
+## Roadmap visual y de experiencia de mascota
 
-### M11. Companion Hub launcher
+La dirección posterior a 1.0 es una experiencia local pulida: una mascota
+cálida, expresiva y premium, sin fingir ser un agente de IA. La calidad visual
+puede recordar a herramientas modernas, pero el límite permanece intacto:
+eventos locales entran y la mascota los presenta honestamente.
 
-- [ ] Consumer-facing desktop Hub with the approved collection, living stage,
-  and contextual-detail layout.
-- [ ] Discover and validate installed companion packs.
-- [ ] Create/select companions with independent runtime roots.
-- [ ] Preview, start, show, hide, and stop Hub-owned companions.
-- [ ] Human-readable status and last activity; technical details stay behind
-  an advanced view.
-- [ ] Separate `Companion Hub.exe` build for Windows.
-- [ ] First-run welcome flow with two clear paths: create a companion or open
-  the local pet collection.
+### M11. Companion Stage v2 — visual foundation
 
-### M12. Companion Forge and guided onboarding
+- [x] Define shared design tokens for color, typography, spacing, radii,
+  shadows, focus rings, and motion.
+- [x] Add light, dark, and soft-neon presentation themes.
+- [x] Standardize the visual treatment of `idle`, `thinking`, `working`,
+  `success`, `error`, and `waiting`.
+- [x] Add accessible text/status fallbacks and non-color-only state cues.
+- [x] Redesign the transparent stage with soft state-aware glow, message
+  bubbles, and non-invasive transitions.
+- [x] Preserve drag, opacity, position, topmost, and Escape behavior.
 
-- [ ] Make `Create Companion` the primary onboarding experience for new users.
-- [ ] Provide intention-first choices: coding companion, local AI companion,
-  connect an existing agent, or use pets without an agent.
-- [ ] Add portable declarative Companion Recipes with the lifecycle
-  `detect -> propose -> confirm -> execute -> verify -> receipt`.
-- [ ] Define `cap.doctor` as a first-class, provider-agnostic diagnostic
-  capability. Doctor inspects and reports; it never installs by itself.
+### M12. Context menu and interaction polish
+
+- [x] Group controls into Companion, Window, Runtime, and System sections.
+- [x] Add keyboard navigation, Escape handling, focus visibility, and shortcut
+  hints.
+- [x] Add human-readable descriptions and disabled-state explanations.
+- [x] Keep destructive actions explicit and confirmable.
+- [x] Keep state authority external: the menu may inspect state but must not
+  fabricate agent state or bypass the event protocol.
+
+### M13. Companion Hub
+
+- [x] Build a consumer-facing Hub with collection, living stage, and
+  contextual-detail layouts.
+- [x] Discover and validate installed packs.
+- [x] Create/select companions with independent runtime roots.
+- [x] Preview, start, show, hide, and stop Hub-owned companions.
+- [x] Show human-readable status and last activity; keep technical details in
+  an Advanced view.
+- [x] Add a first-run flow with clear paths: create a companion or open the
+  local pet collection.
+- [ ] Produce a separate `Companion Hub.exe` build for Windows.
+
+### M14. Pack Gallery
+
+- [x] Add animated pack previews with author, license, palette, and supported
+  states.
+- [x] Add `Preview` and `Use this pack` flows with validation before use.
+- [x] Document the visual contract for `idle`, `thinking`, `working`,
+  `success`, `error`, and `waiting`.
+- [x] Keep packs declarative and sandboxed; no pack-specific executable
+  actions or browser automation.
+
+### M15. Personality without AI
+
+- [x] Add local personality settings for tone, verbosity, and message policy.
+- [x] Support configurable greetings, success messages, and error detail level.
+- [x] Keep personality as presentation policy over canonical events.
+- [x] Do not add inference, cloud calls, accounts, or hidden interpretation of
+  reminder text.
+
+### M16. Activity Timeline and Trust Center
+
+- [x] Add a local activity timeline for states, messages, reminders, and
+  adapter events.
+- [x] Support filtering by companion, agent, and event type.
+- [x] Allow copying/exporting canonical event JSONL and diagnostics.
+- [ ] Promote `cap.doctor` to a first-class provider-agnostic diagnostic
+  capability.
 - [ ] Standardize Doctor outcomes as `READY`, `NEEDS_ACTION`, `BLOCKED`, or
-  `UNKNOWN`, without false-green success states.
-- [ ] Detect common local prerequisites such as Git, Python, Node, and
-  available CLI/TUI agents.
-- [ ] Check platform, CPU architecture, PATH, permissions, disk space, ports,
-  versions, conflicts, existing installations, upgrade paths, and rollback
-  feasibility when relevant to a recipe.
-- [ ] Generate a declarative installation plan rather than free-form shell:
-  official source, package/artifact, version, architecture, checksum or
-  signature, destination, permissions, verification, and rollback metadata.
-- [ ] Display a `License & Source Review` with detected license, official source,
-  terms link, redistribution/commercial-use summary, notices, and an explicit
-  `UNKNOWN`/user-review state for ambiguity. It must not claim universal legal
-  approval.
-- [ ] Never execute installation or configuration commands before displaying
-  the exact action and receiving explicit confirmation.
-- [ ] Keep proposal, verification, authority, and execution separate:
-  recipes propose, Doctor verifies, the user authorizes, and a constrained
-  installer performs only declared operations.
-- [ ] Ship one supported coding-agent recipe plus a generic
-  `connect existing CLI/TUI` recipe.
-- [ ] Guide the user with a bundled default companion instead of technical
-  installer language.
-- [ ] Verify the complete path: agent launches, adapter responds, events reach
-  the runtime, and the companion renders the resulting state/message.
-- [ ] Produce a readable installation receipt and actionable recovery steps.
-- [ ] Run Doctor again after execution and require all mandatory checks to pass
-  before reporting the companion ready.
+  `UNKNOWN`; never show false-green success states.
+- [ ] Keep technical evidence available without making it the default UI.
 
-### M13. Recipe ecosystem and full companion creation
+### M17. Companion Forge and guided onboarding
 
-- [ ] Add recipe packs for more CLI/TUI agents, local models, and API-backed
-  providers without coupling the Companion core to any provider.
-- [ ] Define capability contracts for chat, notifications, status, and actions.
-- [ ] Allow providers/runtimes to contribute Doctor hooks while returning the
-  same stable diagnostic contract (`opencode.doctor`, `ollama.doctor`, generic
-  CLI/TUI Doctor, and future adapters).
-- [ ] Add provenance policies for official sources, package registries,
-  checksums/signatures, version pinning, and license metadata.
-- [ ] Combine agent adapter, capabilities, visual pack, and behavior/personality
-  into one portable companion definition.
-- [ ] Add safe rollback/uninstall hooks for recipe-owned changes.
-- [ ] Import/export recipes and companion configurations.
-- [ ] Add a basic visual pack/manifest editor with validation and preview.
-- [ ] Support profiles, startup preferences, and reusable creation templates.
-- [ ] Document a public recipe authoring contract and verification suite.
+- [x] Make `Create Companion` the primary onboarding experience.
+- [x] Offer intention-first choices: coding companion, local AI companion,
+  existing agent, or pets without an agent.
+- [x] Add portable declarative recipes with the lifecycle
+  `detect -> propose -> confirm -> execute -> verify -> receipt`.
+- [x] Detect platform, architecture, PATH, permissions, ports, versions,
+  conflicts, and rollback feasibility where relevant.
+- [x] Show official source, artifact, version, checksum/signature, permissions,
+  license metadata, and exact actions before execution.
+- [x] Require explicit confirmation before any installation or configuration
+  mutation.
+- [x] Verify the full path: agent launches, adapter responds, events reach the
+  runtime, and the companion renders the resulting state/message.
+- [x] Produce readable installation receipts and recovery steps.
+
+### M18. Recipe ecosystem and companion creation
+
+- [x] Add recipes for more CLI/TUI agents, local models, and API-backed
+  providers without coupling them to Companion core.
+- [x] Define capability contracts for chat, notifications, status, and actions.
+- [x] Allow providers to contribute Doctor hooks through the same diagnostic
+  contract.
+- [x] Add provenance policies for official sources, registries, checksums,
+  signatures, version pinning, and license metadata.
+- [x] Combine adapter, capabilities, visual pack, and personality into one
+  portable companion definition.
+- [x] Add safe rollback/uninstall hooks for recipe-owned changes.
+- [x] Import/export recipes and companion configurations.
+- [x] Add a validated visual pack/manifest editor.
+- [x] Document a public recipe-authoring contract and verification suite.
+
+### M19. Distribution polish
+
+- [ ] Ship native Windows and Linux launchers/installers.
+- [x] Add configuration migration, crash recovery, safe-store repair, and
+  exportable diagnostics.
+- [x] Add versioned pack distribution and compatibility checks.
+- [ ] Add real GUI smoke tests to the CI matrix where a display is available.
+- [ ] Publish a visual demo, screenshots, accessibility notes, and release
+  receipts for supported platforms.
 
 ## Explicitly out of scope for now
 

@@ -1,4 +1,8 @@
-# Guía del dueño — Open Agent Companion 1.0.0
+# Guía de la mascota — Open Agent Companion 1.0.0
+
+Esta guía está escrita para quien quiere tener una mascotita virtual en su
+escritorio, no para quien quiere operar una plataforma. Puedes ignorar la
+parte técnica si solo quieres invocarla, elegir un pack y dejarla vivir ahí.
 
 ## Lo que viniste a hacer
 
@@ -265,3 +269,21 @@ Si falta un estado opcional, el renderer usa idle. Si la ventana sigue en idle,
 revisa que --pack apunte a la carpeta que contiene manifest.json y vuelve a
 validar el pack. Los errores de ruta, manifest o asset se muestran antes de
 abrir la ventana.
+
+## La casita: Companion Hub
+
+Si tienes más de una mascotita, abre su casita local:
+
+    companion --root .companion hub --theme soft-neon
+
+Desde el Hub puedes crear una mascota y usar `Start`, `Hide`, `Show` y `Stop`.
+Esos botones sí controlan la instancia real: `Start` lanza la ventana,
+`Hide` y `Show` publican eventos al runtime, y `Stop` detiene el proceso que
+el Hub inició.
+
+Si una instancia no arranca, aparecerá como `failed` y podrás usar `Retry`.
+El Hub no pinta una mascota como `running` solamente porque se pulsó un botón.
+
+Los temas disponibles son `dark`, `light` y `soft-neon`. En Linux, una sesión
+gráfica sin compositor puede mostrar transparencias de forma distinta; el
+runtime y el fallback de texto siguen funcionando.

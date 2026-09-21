@@ -1,8 +1,8 @@
-# Contributing
+# Cómo contribuir
 
 Local-first project. No accounts, no cloud, no AI in the runtime.
 
-## Rules
+## Reglas
 
 1. Protocol first: `SPEC.md` is the contract. New events need validation,
    tests, and a SPEC entry.
@@ -15,7 +15,7 @@ Local-first project. No accounts, no cloud, no AI in the runtime.
 5. Small diffs: one milestone slice per change, docs updated in the same
    change (README/GUIA/SPEC/ROADMAP as needed).
 
-## Setup
+## Preparación
 
 ```powershell
 py -m pip install --editable ".[build]"

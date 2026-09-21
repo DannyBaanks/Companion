@@ -1,281 +1,250 @@
 # Open Agent Companion
 
 <p align="center">
-  <strong>A tiny, local desktop companion for agents, CLIs, and humans.</strong><br>
-  Animated pets, useful reminders, and a deliberately boring JSONL protocol.
+  <strong>Una mascotita virtual para tu escritorio.</strong><br>
+  Local, expresiva, personalizable y discretamente útil.
 </p>
 
 <p align="center">
-  <img src="packs/malbolge-cat/idle.gif" alt="Malbolgato companion" width="180">
+  <img src="packs/malbolge-cat/idle.gif" alt="Malbolgato, mascota virtual de Companion" width="180">
 </p>
 
 <p align="center">
-  <a href="LICENSE">MIT License</a> ·
-  <a href="SPEC.md">Protocol</a> ·
-  <a href="SECURITY.md">Security</a>
+  <a href="LICENSE">Licencia MIT</a> ·
+  <a href="GUIA.md">Guía en español</a> ·
+  <a href="SECURITY.md">Privacidad y seguridad</a> ·
+  <a href="SPEC.md">Protocolo técnico</a>
 </p>
 
-**Open Agent Companion 1.0.0 (MIT).** A local, open desktop companion for
-agents and CLIs. Any agent or local process publishes state and short
-messages through a versioned JSONL protocol; the companion renders them in
-a transparent animated window.
+**Open Agent Companion 1.0.0.** Una mascota virtual local que vive en tu
+escritorio, cambia de ánimo, muestra mensajitos, recuerda cosas y puede usar
+distintos packs visuales.
 
-No AI, no cloud, no accounts. Reminders, timers, recurrence, pomodoro, and
-adapters are producers only: when due, they write a normal `say` event to
-the companion inbox through the same canonical pipeline.
+No necesita cuenta, nube ni inteligencia artificial. Puedes usarla sola, como
+recordatorio personal, o conectarla opcionalmente a una herramienta local que
+ya uses.
 
-## What you get
+## ¿Qué es?
 
-- Animated PNG/GIF pets driven by a small, inspectable JSONL event protocol.
-- A compact right-click GUI for state, position, opacity, messages, and packs.
-- Local reminders, timers, recurrence, snooze, and Pomodoro helpers.
-- Optional localhost WebSocket and TypeScript integrations.
-- Declarative packs, so anyone can bring their own art and personality.
+Companion es una criatura pequeña de escritorio con una ventana animada y un
+protocolo local sencillo. Recibe eventos como `thinking`, `working`, `success`
+o `error` y los convierte en animaciones, mensajes y cambios de humor.
 
-## Contents
+La idea es simple:
 
-- [Quick start](#quick-start)
-- [Packs and configuration](#packs-and-configuration)
-- [Adapters](#adapters)
-- [Operating modes](#operating-modes)
-- [Distribution and hardening](#distribution-and-hardening)
+```text
+un evento local → la mascotita reacciona → tú entiendes qué pasó
+```
 
-## Quick start
+## ¿Qué puede hacer?
+
+- Mostrar una mascota PNG o GIF con estados animados.
+- Cambiar de posición, opacidad, tema y pack.
+- Enseñar mensajes breves con prioridad y caducidad.
+- Crear reminders, timers, recurrencia, snooze y Pomodoro.
+- Tener varias mascotas independientes.
+- Mostrar una personalidad local configurable.
+- Abrir un Hub para iniciar, ocultar y detener tus mascotas.
+- Registrar actividad y ofrecer diagnósticos locales.
+- Recibir eventos de una CLI, script o integración opcional.
+
+## ¿Qué no es?
+
+- No es un chatbot.
+- No contiene un modelo de IA.
+- No sincroniza datos con la nube.
+- No necesita cuentas.
+- No ejecuta comandos escritos en reminders.
+- No instala cosas silenciosamente.
+- No rastrea tu actividad.
+
+## Instalación rápida
+
+Linux y macOS:
+
+```bash
+python3 -m pip install --editable .
+companion --root .companion init
+companion --root .companion gui --pack packs/malbolge-cat --name Malbolgato
+```
+
+Windows:
 
 ```powershell
 py -m pip install --editable .
 companion --root .companion init
-companion --root .companion summon
-companion --root .companion --agent terra say "Milestone terminado" --ttl 8
+companion --root .companion gui --pack .\packs\malbolge-cat --name Malbolgato
+```
+
+La ventana es arrastrable. Presiona `Esc` para cerrarla y haz clic derecho
+para abrir los controles.
+
+## Primer mensajito
+
+Puedes hacer que la mascota diga algo desde cualquier terminal:
+
+```bash
+companion --root .companion say "Ya llegué :p" --ttl 8
 companion --root .companion run --once
-companion --root .companion status
 ```
 
-Messages can use a TTL and integer priority. Higher priority messages are
-shown first; queued message TTL starts when that message is displayed:
+El mensaje se guarda localmente y desaparece cuando termina su TTL.
 
-```powershell
-companion --root .companion say "Build urgente" --ttl 8 --priority 10
+Para cambiar su estado:
+
+```bash
+companion --root .companion mood thinking
+companion --root .companion run --once
 ```
 
-Runtime state persists the pending message queue in the companion's state file.
-Queued messages keep their priority and FIFO sequence across Runtime restarts,
-and their TTL begins only when they become visible. Active messages retain their
-existing absolute expiry. Older state files without the queue field continue to
-load with an empty pending queue.
+Los estados disponibles son `idle`, `thinking`, `working`, `success`, `error`
+y `waiting`.
 
-Create and manage local reminders, timers, recurrence, and snooze:
+## Packs y estética
 
-```powershell
-companion --root .companion remind add --at "19:30" --message "Sacar la ropa"
-companion --root .companion remind add --in 10m --message "Revisar el horno"
-companion --root .companion remind add --at "08:00" --message "Stand up" --recurrence daily
-companion --root .companion remind add --at "09:00" --message "Reporte" --recurrence weekly --weekdays mon,fri
-companion --root .companion timer --in 5m --message "Té listo"
-companion --root .companion remind snooze rem_... --minutes 15
-companion --root .companion remind list
-companion --root .companion remind cancel rem_...
-companion --root .companion pomodoro --work 25 --break 5 --message "Deep work"
-companion --root .companion notify "Build terminado"
-```
-
-`--at` accepts local `HH:MM` or an ISO-8601 timestamp. `--in` accepts
-`30s`, `10m`, `2h`, or `1d`. Stored records retain their explicit UTC
-offset in `reminders.json`. `companion run` checks due reminders and
-processes their events; an overdue pending reminder fires once after
-restart. Recurring reminders fire and reschedule: `daily` is +1 day,
-`weekly` is +7 days (or the next matching `--weekdays`), and `countdown`
-ticks `message` as `N..1` each minute. Snoozed reminders wait until
-`snoozed_until` before becoming pending again. Pomodoro only plans two
-one-shot reminders through the same pipeline; it is not a runtime feature.
-`notify` is an optional best-effort OS notification (`pip install
-'open-agent-companion[notify]'`); it never blocks the pipeline.
-
-## Packs and configuration
-
-A pack is a folder with a declarative `manifest.json`:
+Un pack es una carpeta con un `manifest.json` y una imagen por estado:
 
 ```json
 {
-  "id": "example-cat",
-  "name": "Example Cat",
+  "id": "mi-gato",
+  "name": "Mi Gato",
   "animations": {
     "idle": "idle.gif",
-    "thinking": "think.gif",
+    "thinking": "thinking.gif",
+    "working": "working.gif",
     "success": "success.gif",
-    "error": "error.gif"
+    "error": "error.gif",
+    "waiting": "waiting.gif"
   }
 }
 ```
 
-Validate it before use:
+Valida el pack antes de usarlo:
 
-```powershell
-companion pack validate .\assets\example-cat
-companion --root .companion gui --pack .\assets\example-cat
+```bash
+companion pack validate ./packs/mi-gato
+companion --root .companion gui --pack ./packs/mi-gato
 ```
 
-The included Malbolgato pack and renderer request are a complete smoke test:
+Si falta un estado opcional, Companion usa `idle` o muestra un fallback de
+texto. Un pack nunca puede ejecutar acciones arbitrarias: solo define cómo se
+ve la mascota.
 
-```powershell
-companion pack validate .\packs\malbolge-cat
-companion render-request validate .\examples\render_request.json
-companion --root .companion gui --pack .\packs\malbolge-cat
-```
+Packs incluidos:
 
-examples/render_request.json is a renderer-facing customization contract.
-name and style are required; palette, states, output.cell_size, and
-renderer-specific fields are optional. Companion validates the supported
-fields and prints normalized JSON; it does not render or make network calls.
-Missing optional animation states fall back to idle. A missing asset or an
-invalid manifest is reported by pack validate before the GUI opens.
+- `packs/malbolge-cat`: gato pixel-art neón.
+- `packs/tabby-shinji-cat`: gato tabby con estética anime.
+- `examples/example-cat`: pack mínimo para experimentar.
 
-The renderer chooses a mood-specific asset first, then the current state, then
-`idle`. Missing optional states therefore do not break a pack. Configuration
-can select the pack and window settings:
+## Personalidad
 
-```toml
-[companion]
-name = "Terra"
-pack = "assets/example-cat"
+La personalidad es presentación, no inteligencia. Se puede guardar localmente
+en `personality.json`:
 
-[window]
-position = "bottom-right"
-topmost = true
-opacity = 1.0
-```
-
-Launch the GUI from a configuration file when you want the same setup every
-time:
-
-```powershell
-companion --root .companion gui --config .\companion.toml
-```
-
-The `pack` value is resolved relative to the directory containing
-`companion.toml`, not relative to the current shell directory. For example,
-with the file above saved at the project root, `pack = "packs/malbolge-cat"`
-loads `./packs/malbolge-cat` even if the command is launched from elsewhere.
-
-Launch the desktop window with an optional GIF or PNG:
-
-```powershell
-companion --root .companion gui --asset .\assets\example-cat\idle.gif --name Terra
-```
-
-Click and drag the window to move it. Press `Esc` to close it.
-Right-click the mascot for compact controls: state, position, opacity, message
-visibility, pack selection, and pack reload. The controls update the local
-runtime and never modify pack files. If the mascot appears stuck on idle,
-check the pack path and run pack validate again.
-
-Any process can publish directly by appending one JSON object per line to
-`.companion/inbox.jsonl`. See [SPEC.md](SPEC.md) for the contract and
-[ROADMAP.md](ROADMAP.md) for the current milestones.
-
-## Adapters
-
-Adapters translate external events into companion JSONL events. They are
-isolated from the core protocol — the companion never calls external APIs.
-
-### Generic hook adapter
-
-Pipe canonical JSONL events from any process into the companion:
-
-```powershell
-# Direct publish
-echo {"version":"companion-event-v1","id":"x","agent":"hook","created_at":"2026-09-09T00:00:00Z","type":"say","text":"Hello"} | companion hook
-
-# From a script
-companion --root .companion hook < events.jsonl
-```
-
-Each input line must be a complete JSON event. Invalid lines are reported
-as errors without stopping the runtime.
-
-### WebSocket adapter (optional)
-
-Start a localhost-only WebSocket server on `127.0.0.1:8765`:
-
-```powershell
-companion websocket --port 8765
-```
-
-Requires `pip install 'open-agent-companion[websocket]'`. Only loopback
-hosts are permitted — no remote connections.
-
-### OpenCode integration
-
-The TypeScript plugin translates OpenCode session events into companion state
-changes. It writes to the same `inbox.jsonl` format.
-
-**OpenCode plugin** (for published OpenCode):
-
-```typescript
-import { CompanionPlugin } from "companion/integrations/opencode-plugin"
-
-export default {
-  name: "companion",
-  plugins: [CompanionPlugin],
+```json
+{
+  "tone": "playful",
+  "verbosity": "low",
+  "greeting": "Holi :p",
+  "success_message": "Listo, quedó precioso.",
+  "error_prefix": "Ups:"
 }
 ```
 
-The plugin emits `state` and `say` events on `session.idle`, `session.error`,
-and `question.asked`. The companion shows a message and updates its state
-automatically — no AI, no cloud, no accounts.
+Los tonos disponibles son `friendly`, `formal`, `playful` y `minimal`.
 
-## Operating modes
+## Reminders y timers
 
-The desktop companion has three independent modes:
-
-1. Standalone: an autonomous desktop creature.
-2. Manual/local utility: GUI, CLI, and local reminders.
-3. External control: Bridge, agents, or other local processes.
-
-None is privileged. AI, Bridge, and the scheduler are optional. The runtime
-remains the common visual substrate.
-
-## Multiple companions
-
-Run multiple independent companions sharing the same inbox directory:
-
-```powershell
-# Terminal 1: companion alpha
-companion --root .companion --companion-id alpha gui
-
-# Terminal 2: companion beta
-companion --root .companion --companion-id beta gui
-
-# Send to specific companion
-companion --root .companion say "Hola alpha" --companion-id alpha
-
-# Send to all companions (no --companion-id)
-companion --root .companion say "Broadcast"
+```bash
+companion --root .companion remind add --in 10m --message "Tomar agua"
+companion --root .companion remind list
+companion --root .companion remind snooze rem_... --minutes 15
+companion --root .companion timer --in 5m --message "Revisar el horno"
+companion --root .companion pomodoro --work 25 --break 5 --message "Foco"
 ```
 
-Each companion maintains its own state file (`state-{id}.json`), messages,
-and reminders. Events without `companion_id` are visible to all companions.
-Events with `companion_id` are routed only to that companion.
+Los reminders son datos. La mascota nunca interpreta su texto como código ni
+lo ejecuta como shell.
 
-## Distribution and hardening
+## Companion Hub
 
-```powershell
-companion --version
-companion path
-companion doctor
-companion logs --tail 20
+El Hub es la casita de tus mascotas:
+
+```bash
+companion --root .companion hub
 ```
 
-- Data dir: explicit `--root` wins, then `$COMPANION_ROOT`, then `./.companion`.
-  `companion path` also shows the platform default dir and discovered
-  `companion.toml/json`.
-- Crash recovery: state, reminders, and inbox offsets are written atomically
-  (`fsync` + tmp + replace). Corrupt JSON is backed up to `*.corrupt` and the
-  runtime keeps going with defaults; `doctor` reports the backups.
-- Logs: structured JSONL in `<root>/logs.jsonl`, warnings/errors also on stderr.
-- Cross-platform: Windows uses `-transparentcolor`, Linux/macOS fall back to
-  `-alpha`. No code path assumes backslashes or drive letters.
-- Build: `powershell -ExecutionPolicy Bypass -File tools\build_exe.ps1`
-  produces `dist\companion.exe` (PyInstaller, local only).
-- Security: no shell execution, no network by default, WebSocket is opt-in
-  localhost-only. See [SECURITY.md](SECURITY.md).
+Desde ahí puedes crear mascotas, iniciar una instancia real, ocultarla,
+mostrarla o detenerla. El Hub conserva estados honestos: si un proceso no
+arranca, aparece como fallido; no pinta `running` solo porque alguien hizo
+clic.
+
+Temas disponibles:
+
+```bash
+companion --root .companion hub --theme dark
+companion --root .companion hub --theme light
+companion --root .companion hub --theme soft-neon
+```
+
+## Integraciones opcionales
+
+Companion puede recibir eventos de procesos locales mediante:
+
+- hook JSONL genérico;
+- WebSocket opcional limitado a localhost;
+- adaptador de OpenCode;
+- adaptador de OpenISy TUI.
+
+Estas integraciones son accesorios. La mascota sigue funcionando sin agentes,
+sin red y sin servicios externos.
+
+## Diagnóstico
+
+```bash
+companion --root .companion doctor
+companion --root .companion doctor --json
+companion --root .companion path
+companion --root .companion logs --tail 20
+```
+
+Doctor usa estados honestos: `READY`, `NEEDS_ACTION`, `BLOCKED` y `UNKNOWN`.
+Si no puede comprobar algo, no lo presenta como perfecto.
+
+## Arquitectura en una mirada
+
+```text
+CLI / script / integración local
+              │
+              ▼
+        inbox.jsonl
+              │
+              ▼
+        runtime local
+              │
+              ▼
+       mascota animada
+```
+
+El protocolo es JSONL versionado, append-only y local. La documentación
+técnica completa está en [SPEC.md](SPEC.md).
+
+## Privacidad
+
+Companion funciona localmente, sin cuentas y sin nube. No ejecuta shell, no
+abre red por defecto y no convierte texto de reminders en acciones.
+
+Consulta [SECURITY.md](SECURITY.md) para las garantías y los límites
+verificados.
+
+## Desarrollo
+
+```bash
+python3 -m pytest -q
+```
+
+La suite cubre runtime, protocolo, packs, reminders, GUI, Hub, Doctor,
+personalidad, timeline y hardening.
+
+El roadmap completo está en [ROADMAP.md](ROADMAP.md). Si quieres contribuir,
+revisa [CONTRIBUTING.md](CONTRIBUTING.md).
