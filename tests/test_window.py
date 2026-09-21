@@ -6,7 +6,12 @@ import tkinter as tk
 from companion.pack import AssetPack
 from companion.protocol import POSITIONS, STATES
 from companion.runtime import Runtime
-from companion.window import AnimatedAsset, DesktopWindow
+from companion.window import AnimatedAsset, DesktopWindow, _tk_color
+
+
+def test_tk_color_strips_css_alpha_for_canvas():
+    assert _tk_color("#6ee7b788") == "#6ee7b7"
+    assert _tk_color("#6ee7b7") == "#6ee7b7"
 
 
 class FakeRoot:

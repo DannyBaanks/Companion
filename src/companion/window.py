@@ -24,6 +24,13 @@ def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
 
+def _tk_color(hex_color: str) -> str:
+    """Convert CSS-like #rrggbbaa tokens to Tk's #rrggbb format."""
+    if hex_color.startswith("#") and len(hex_color) == 9:
+        return hex_color[:7]
+    return hex_color
+
+
 def _lerp_color(c1: tuple[int, int, int], c2: tuple[int, int, int], t: float) -> tuple[int, int, int]:
     return tuple(int(a + (b - a) * t) for a, b in zip(c1, c2))  # type: ignore[return-value]
 
@@ -475,9 +482,10 @@ class DesktopWindow:
         sv = t.states.get(state_name)
         if sv is None:
             return
-        glow_color = sv.glow[3]  # "#rrggbbaa"
+        glow_color = sv.glow[3]  # token may include CSS alpha
         if glow_color.endswith("00"):
             return  # fully transparent → skip
+        glow_color = _tk_color(glow_color)
         r = self._GLOW_R
         self.glow_canvas.delete("glow")
         # Outer glow ring
