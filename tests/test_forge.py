@@ -24,7 +24,7 @@ def _sample_recipe(**overrides) -> Recipe:
         "description": "Set up a Python coding companion",
         "author": "Danny",
         "license": "MIT",
-        "platform": ["linux", "windows"],
+        "platform": ["linux", "windows", "macos"],
         "capabilities": ["chat", "status"],
         "steps": [
             {"name": "install-pip", "action": "install", "command": ["pip", "install", "open-agent-companion"],
@@ -92,7 +92,7 @@ def test_recipe_store_import_invalid(tmp_path):
 
 def test_platform_detect():
     p = PlatformInfo.detect()
-    assert p.os in ("linux", "windows", "darwin")
+    assert p.os in ("linux", "windows", "macos")
     assert p.arch
     assert p.python_version
 

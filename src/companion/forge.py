@@ -162,8 +162,12 @@ class PlatformInfo:
 
     @classmethod
     def detect(cls) -> "PlatformInfo":
+        detected_os = platform.system().lower()
+        # Keep the public recipe vocabulary stable across Python's platform
+        # spelling (Darwin) and the user-facing platform name (macos).
+        normalized_os = {"darwin": "macos"}.get(detected_os, detected_os)
         return cls(
-            os=platform.system().lower(),
+            os=normalized_os,
             arch=platform.machine().lower(),
             python_version=platform.python_version(),
         )
