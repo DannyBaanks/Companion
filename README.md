@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="./packs/malbolge-cat/idle.gif" alt="Malbolgato, una mascota animada de Companion" width="180">
-
 # Open Agent Companion
 
 ### Mascotas de escritorio que reaccionan a tus herramientas locales
