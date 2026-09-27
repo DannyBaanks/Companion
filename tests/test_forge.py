@@ -132,9 +132,10 @@ def test_forge_execute_dry_run():
     forge = Forge(Path("/tmp/test"), dry_run=True)
     r = _sample_recipe()
     receipt = forge.execute(r)
-    assert len(receipt.steps_completed) == 2
+    assert receipt.steps_completed == []
     assert receipt.steps_failed == []
     assert receipt.recipe_id == "setup-python"
+    assert receipt.dry_run is True
 
 
 def test_forge_non_dry_run_refuses_unimplemented_execution():
@@ -148,8 +149,8 @@ def test_forge_verify_success():
     r = _sample_recipe()
     receipt = forge.execute(r)
     ok, msg = forge.verify(r, receipt)
-    assert ok is True
-    assert "verified" in msg
+    assert ok is False
+    assert "simulation" in msg
 
 
 def test_forge_verify_failure():

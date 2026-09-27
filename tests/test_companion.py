@@ -12,6 +12,39 @@ def test_event_validation_rejects_unknown_state():
         new_event("state", value="confused")
 
 
+@pytest.mark.parametrize("version", [None, "companion-event-v2"])
+def test_event_validation_requires_supported_version(version):
+    event = new_event("summon")
+    if version is None:
+        event.pop("version")
+    else:
+        event["version"] = version
+    with pytest.raises(ProtocolError, match="version"):
+        from companion.protocol import validate_event
+        validate_event(event)
+
+
+@pytest.mark.parametrize("created_at", [None, "yesterday", "2026-99-99T00:00:00Z"])
+def test_event_validation_requires_iso_datetime(created_at):
+    event = new_event("summon")
+    if created_at is None:
+        event.pop("created_at")
+    else:
+        event["created_at"] = created_at
+    with pytest.raises(ProtocolError, match="created_at"):
+        from companion.protocol import validate_event
+        validate_event(event)
+
+
+@pytest.mark.parametrize("ttl", [float("nan"), float("inf"), float("-inf")])
+def test_event_validation_rejects_non_finite_ttl(ttl):
+    event = new_event("say", text="hello")
+    event["ttl"] = ttl
+    with pytest.raises(ProtocolError, match="ttl"):
+        from companion.protocol import validate_event
+        validate_event(event)
+
+
 def test_runtime_processes_events_and_writes_ack(tmp_path: Path):
     root = tmp_path / "companion"
     runtime = Runtime(root)
@@ -105,6 +138,9 @@ def test_companion_id_ignores_events_for_other_companions(tmp_path: Path):
 
     assert processed == 1
     assert runtime.state["message"] is None
+    ack = json.loads((root / "outbox.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert ack["status"] == "ignored"
+    assert ack["reason"] == "companion_id_mismatch"
 
 
 def test_companion_id_none_accepts_all_events(tmp_path: Path):

@@ -62,6 +62,10 @@ Para un evento aceptado se escribe un acuse como:
 }
 ```
 
+Si un runtime asociado a una mascota recibe un evento dirigido a otra
+`companion_id`, no aplica sus efectos y escribe un acuse `ignored` con
+`reason: "companion_id_mismatch"`.
+
 El runtime conserva el offset de lectura para no procesar dos veces un evento
 después de reiniciar.
 

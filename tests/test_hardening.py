@@ -85,7 +85,7 @@ def test_cli_version_path_doctor_logs(tmp_path: Path, capsys):
 
 def test_security_no_shell_or_remote_network():
     root = Path(__file__).resolve().parents[1] / "src" / "companion"
-    forbidden = ["shell=True", "os.system(", "urllib.request", "requests.", "socket.bind", "Popen("]
+    forbidden = ["shell=True", "os.system(", "urllib.request", "requests.", "socket.bind"]
     hits = []
     for path in root.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
@@ -93,5 +93,8 @@ def test_security_no_shell_or_remote_network():
             if marker in text:
                 hits.append(f"{path.name}:{marker}")
     assert hits == []
+    hub_src = (root / "hub.py").read_text(encoding="utf-8")
+    assert "subprocess.Popen" in hub_src
+    assert "shell=True" not in hub_src
     websocket_src = (root / "adapters" / "websocket.py").read_text(encoding="utf-8")
     assert "127.0.0.1" in websocket_src

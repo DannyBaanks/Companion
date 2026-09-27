@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import math
 from typing import Any
 import uuid
 
@@ -33,11 +34,20 @@ def new_event(event_type: str, *, agent: str = "cli", companion_id: str | None =
 def validate_event(event: Any) -> dict[str, Any]:
     if not isinstance(event, dict):
         raise ProtocolError("event must be a JSON object")
+    if event.get("version") != "companion-event-v1":
+        raise ProtocolError("version must be companion-event-v1")
     for key in ("id", "agent", "type"):
         if not isinstance(event.get(key), str) or not event[key].strip():
             raise ProtocolError(f"{key} must be a non-empty string")
     if event["type"] not in EVENT_TYPES:
         raise ProtocolError(f"unsupported event type: {event['type']}")
+    created_at = event.get("created_at")
+    if not isinstance(created_at, str) or not created_at.strip():
+        raise ProtocolError("created_at must be an ISO-8601 datetime")
+    try:
+        datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ProtocolError("created_at must be an ISO-8601 datetime") from exc
     if event["type"] == "say":
         if not isinstance(event.get("text"), str) or not event["text"].strip():
             raise ProtocolError("say events require non-empty text")
@@ -53,6 +63,11 @@ def validate_event(event: Any) -> dict[str, Any]:
         if not isinstance(value, str) or value not in POSITIONS:
             raise ProtocolError(f"value must be one of: {', '.join(sorted(POSITIONS))}")
     ttl = event.get("ttl")
-    if ttl is not None and (isinstance(ttl, bool) or not isinstance(ttl, (int, float)) or ttl < 0):
+    if ttl is not None and (
+        isinstance(ttl, bool)
+        or not isinstance(ttl, (int, float))
+        or not math.isfinite(ttl)
+        or ttl < 0
+    ):
         raise ProtocolError("ttl must be a non-negative number")
     return event
