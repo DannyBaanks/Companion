@@ -118,7 +118,7 @@ class Runtime:
         if self.companion_id is not None:
             event_companion_id = event.get("companion_id")
             if event_companion_id is not None and event_companion_id != self.companion_id:
-                self._emit("accepted", event_id=event_id, event_type=event_type)
+                self._emit("ignored", event_id=event_id, event_type=event_type, reason="companion_id_mismatch")
                 return
         if event_type in {"summon", "status"}:
             self.state["visible"] = True

@@ -138,6 +138,7 @@ class RecipeReceipt:
     steps_failed: list[str]
     rollback_performed: bool = False
     verified: bool = False
+    dry_run: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -149,6 +150,7 @@ class RecipeReceipt:
             "steps_failed": self.steps_failed,
             "rollback_performed": self.rollback_performed,
             "verified": self.verified,
+            "dry_run": self.dry_run,
         }
 
 
@@ -284,29 +286,28 @@ class Forge:
         }
 
     def execute(self, recipe: Recipe) -> RecipeReceipt:
-        """Execute the recipe steps (or simulate in dry_run mode)."""
+        """Simulate recipe steps in dry-run mode; real execution is not implemented."""
         if not self.dry_run:
             raise ForgeExecutionError(
                 "recipe execution is not implemented; use dry_run=True until "
                 "a constrained executor is available"
             )
-        completed: list[str] = []
-        failed: list[str] = []
-
-        for step in recipe.steps:
-            completed.append(step.name)
-
         return RecipeReceipt(
             recipe_id=recipe.id,
             recipe_version=recipe.version,
             executed_at=datetime.now(timezone.utc).isoformat(),
             platform=self.platform.os,
-            steps_completed=completed,
-            steps_failed=failed,
+            steps_completed=[],
+            steps_failed=[],
+            dry_run=True,
         )
 
     def verify(self, recipe: Recipe, receipt: RecipeReceipt) -> tuple[bool, str]:
         """Verify that the recipe was applied correctly."""
+        if receipt.dry_run:
+            return False, "dry-run receipt is a simulation; no recipe effects were verified"
+        if receipt.recipe_id != recipe.id or receipt.recipe_version != recipe.version:
+            return False, "receipt does not match recipe identity and version"
         if receipt.steps_failed:
             return False, f"failed steps: {', '.join(receipt.steps_failed)}"
         if len(receipt.steps_completed) != len(recipe.steps):
