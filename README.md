@@ -1,250 +1,205 @@
+<div align="center">
+
+<img src="./packs/malbolge-cat/idle.gif" alt="Malbolgato, una mascota animada de Companion" width="180">
+
 # Open Agent Companion
 
-<p align="center">
-  <strong>Una mascotita virtual para tu escritorio.</strong><br>
-  Local, expresiva, personalizable y discretamente útil.
-</p>
+### Mascotas de escritorio que reaccionan a tus herramientas locales
+
+[![CI](https://github.com/DannyBaanks/Companion/actions/workflows/ci.yml/badge.svg)](https://github.com/DannyBaanks/Companion/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB)](https://www.python.org/)
+[![Licencia MIT](https://img.shields.io/badge/licencia-MIT-blue)](./LICENSE)
+
+</div>
 
 <p align="center">
-  <img src="packs/malbolge-cat/idle.gif" alt="Malbolgato, mascota virtual de Companion" width="180">
+  <img src="./packs/malbolge-cat/working.gif" alt="Malbolgato trabajando, con su animación pixel-art neón" width="220">
+  <img src="./packs/tabby-shinji-cat/idle.png" alt="Gato tabby de Companion, estilo anime" width="220">
 </p>
 
-<p align="center">
-  <a href="LICENSE">Licencia MIT</a> ·
-  <a href="GUIA.md">Guía en español</a> ·
-  <a href="SECURITY.md">Privacidad y seguridad</a> ·
-  <a href="SPEC.md">Protocolo técnico</a>
-</p>
+**Open Agent Companion** pone una mascotita animada en tu escritorio. Puede
+mostrar estados, mensajes y recordatorios; también puede reaccionar a eventos
+de una CLI o de una integración local que tú conectes.
 
-**Open Agent Companion 1.0.0.** Una mascota virtual local que vive en tu
-escritorio, cambia de ánimo, muestra mensajitos, recuerda cosas y puede usar
-distintos packs visuales.
+La mascota acompaña lo que haces. No es un chatbot ni un agente: no decide ni
+ejecuta tareas.
 
-No necesita cuenta, nube ni inteligencia artificial. Puedes usarla sola, como
-recordatorio personal, o conectarla opcionalmente a una herramienta local que
-ya uses.
+---
 
-## ¿Qué es?
+## 🚀 Empieza en tres pasos
 
-Companion es una criatura pequeña de escritorio con una ventana animada y un
-protocolo local sencillo. Recibe eventos como `thinking`, `working`, `success`
-o `error` y los convierte en animaciones, mensajes y cambios de humor.
+Necesitas **Python 3.11 o posterior**. En Linux, si Python no encuentra Tk,
+instala también el paquete `python3-tk` de tu distribución.
 
-La idea es simple:
-
-```text
-un evento local → la mascotita reacciona → tú entiendes qué pasó
-```
-
-## ¿Qué puede hacer?
-
-- Mostrar una mascota PNG o GIF con estados animados.
-- Cambiar de posición, opacidad, tema y pack.
-- Enseñar mensajes breves con prioridad y caducidad.
-- Crear reminders, timers, recurrencia, snooze y Pomodoro.
-- Tener varias mascotas independientes.
-- Mostrar una personalidad local configurable.
-- Abrir un Hub para iniciar, ocultar y detener tus mascotas.
-- Registrar actividad y ofrecer diagnósticos locales.
-- Recibir eventos de una CLI, script o integración opcional.
-
-## ¿Qué no es?
-
-- No es un chatbot.
-- No contiene un modelo de IA.
-- No sincroniza datos con la nube.
-- No necesita cuentas.
-- No ejecuta comandos escritos en reminders.
-- No instala cosas silenciosamente.
-- No rastrea tu actividad.
-
-## Instalación rápida
-
-Linux y macOS:
+**1. Descarga el proyecto e instala Companion:**
 
 ```bash
-python3 -m pip install --editable .
+git clone https://github.com/DannyBaanks/Companion.git
+cd Companion
+python -m pip install --editable .
+```
+
+En Windows puedes usar `py` en lugar de `python`.
+
+**2. Inicializa tus datos y abre a Malbolgato:**
+
+```bash
 companion --root .companion init
 companion --root .companion gui --pack packs/malbolge-cat --name Malbolgato
 ```
 
-Windows:
+La ventana se puede arrastrar. Presiona `Esc` para cerrarla y haz clic derecho
+sobre la mascota para abrir sus controles.
 
-```powershell
-py -m pip install --editable .
-companion --root .companion init
-companion --root .companion gui --pack .\packs\malbolge-cat --name Malbolgato
-```
-
-La ventana es arrastrable. Presiona `Esc` para cerrarla y haz clic derecho
-para abrir los controles.
-
-## Primer mensajito
-
-Puedes hacer que la mascota diga algo desde cualquier terminal:
+**3. Mándale un mensaje desde otra terminal:**
 
 ```bash
 companion --root .companion say "Ya llegué :p" --ttl 8
-companion --root .companion run --once
 ```
 
-El mensaje se guarda localmente y desaparece cuando termina su TTL.
-
-Para cambiar su estado:
+También puedes cambiar su estado:
 
 ```bash
 companion --root .companion mood thinking
-companion --root .companion run --once
 ```
 
-Los estados disponibles son `idle`, `thinking`, `working`, `success`, `error`
-y `waiting`.
+---
 
-## Packs y estética
+## 🐾 ¿Qué puede hacer?
 
-Un pack es una carpeta con un `manifest.json` y una imagen por estado:
+| Quieres… | Companion puede… |
+|---|---|
+| Ver si una herramienta está trabajando | Cambiar entre estados como `thinking`, `working`, `success`, `error` y `waiting`. |
+| Darle personalidad visual | Mostrar packs PNG o GIF, temas y frases locales configurables. |
+| Acordarte de algo | Crear recordatorios, timers, recurrencias, snooze y ciclos Pomodoro. |
+| Tener más de una mascota | Mantener estado independiente para cada Companion. |
+| Conectarlo a tus herramientas | Recibir eventos mediante una CLI, un hook JSONL o integraciones opcionales. |
+| Revisar si algo anda mal | Consultar diagnósticos locales y logs estructurados. |
 
-```json
-{
-  "id": "mi-gato",
-  "name": "Mi Gato",
-  "animations": {
-    "idle": "idle.gif",
-    "thinking": "thinking.gif",
-    "working": "working.gif",
-    "success": "success.gif",
-    "error": "error.gif",
-    "waiting": "waiting.gif"
-  }
-}
-```
+## 🎨 Elige tu pack
 
-Valida el pack antes de usarlo:
+Cada pack es una carpeta con un `manifest.json` y sus imágenes. Puedes crear
+uno propio y validarlo antes de abrirlo:
 
 ```bash
 companion pack validate ./packs/mi-gato
-companion --root .companion gui --pack ./packs/mi-gato
+companion --root .companion gui --pack ./packs/mi-gato --name "Mi Gato"
 ```
-
-Si falta un estado opcional, Companion usa `idle` o muestra un fallback de
-texto. Un pack nunca puede ejecutar acciones arbitrarias: solo define cómo se
-ve la mascota.
 
 Packs incluidos:
 
-- `packs/malbolge-cat`: gato pixel-art neón.
-- `packs/tabby-shinji-cat`: gato tabby con estética anime.
-- `examples/example-cat`: pack mínimo para experimentar.
+| Pack | Estilo |
+|---|---|
+| [`malbolge-cat`](./packs/malbolge-cat/) | Gato pixel-art neón con animaciones GIF. |
+| [`tabby-shinji-cat`](./packs/tabby-shinji-cat/) | Gato tabby con ilustraciones estilo anime. |
+| [`example-cat`](./examples/example-cat/) | Pack mínimo para experimentar. |
 
-## Personalidad
+Si falta una animación opcional, se usa `idle`. Los packs solo describen cómo
+se ve la mascota; no pueden ejecutar acciones.
 
-La personalidad es presentación, no inteligencia. Se puede guardar localmente
-en `personality.json`:
-
-```json
-{
-  "tone": "playful",
-  "verbosity": "low",
-  "greeting": "Holi :p",
-  "success_message": "Listo, quedó precioso.",
-  "error_prefix": "Ups:"
-}
-```
-
-Los tonos disponibles son `friendly`, `formal`, `playful` y `minimal`.
-
-## Reminders y timers
+## ⏰ Recordatorios y timers
 
 ```bash
 companion --root .companion remind add --in 10m --message "Tomar agua"
 companion --root .companion remind list
-companion --root .companion remind snooze rem_... --minutes 15
+companion --root .companion remind snooze rem_ID --minutes 15
 companion --root .companion timer --in 5m --message "Revisar el horno"
 companion --root .companion pomodoro --work 25 --break 5 --message "Foco"
 ```
 
-Los reminders son datos. La mascota nunca interpreta su texto como código ni
-lo ejecuta como shell.
+Los mensajes se guardan como datos. Companion no los interpreta como comandos
+ni los ejecuta en una terminal.
 
-## Companion Hub
+## 🏠 Companion Hub
 
-El Hub es la casita de tus mascotas:
-
-```bash
-companion --root .companion hub
-```
-
-Desde ahí puedes crear mascotas, iniciar una instancia real, ocultarla,
-mostrarla o detenerla. El Hub conserva estados honestos: si un proceso no
-arranca, aparece como fallido; no pinta `running` solo porque alguien hizo
-clic.
-
-Temas disponibles:
+Si usas varias mascotas, abre el Hub:
 
 ```bash
-companion --root .companion hub --theme dark
-companion --root .companion hub --theme light
 companion --root .companion hub --theme soft-neon
 ```
 
-## Integraciones opcionales
+Desde ahí puedes crear instancias y mostrar, ocultar, iniciar o detener las
+que administra el Hub. Los temas incluidos son `dark`, `light` y `soft-neon`.
 
-Companion puede recibir eventos de procesos locales mediante:
+## 🔌 Conecta una herramienta local
 
-- hook JSONL genérico;
-- WebSocket opcional limitado a localhost;
-- adaptador de OpenCode;
-- adaptador de OpenISy TUI.
+Companion puede recibir eventos de estas formas:
 
-Estas integraciones son accesorios. La mascota sigue funcionando sin agentes,
-sin red y sin servicios externos.
+- **Hook JSONL:** `companion hook` acepta eventos canónicos desde la entrada estándar.
+- **WebSocket opcional:** requiere instalar `open-agent-companion[websocket]` y solo escucha en localhost.
+- **OpenCode y OpenISy TUI:** plugins incluidos en [`integrations/`](./integrations/).
 
-## Diagnóstico
+Las integraciones hacen que la mascota muestre estados y mensajes. No le dan
+autoridad para ejecutar lo que diga un evento.
+
+## 🔒 Local y bajo tu control
+
+- No necesita cuenta, servicio en la nube ni modelo de IA.
+- No abre conexiones de red por defecto.
+- El texto de mensajes y recordatorios no se ejecuta como código.
+- El WebSocket es opcional y limitado a localhost.
+- Los estados se guardan en tu equipo; los datos dañados se respaldan para diagnóstico.
+
+Lee [Privacidad y seguridad](./SECURITY.md) para conocer los límites y las
+garantías del proyecto.
+
+---
+
+## 🆘 Si algo no funciona
+
+| Pasa esto | Prueba esto |
+|---|---|
+| No aparece la mascota | Confirma que Python tenga Tk instalado y que el pack pase `companion pack validate`. |
+| La mascota no recibe el mensaje | Revisa que la ventana y el comando usen el mismo `--root`. |
+| No recuerdas dónde guarda los datos | Ejecuta `companion --root .companion path`. |
+| El diagnóstico encuentra problemas | Ejecuta `companion --root .companion doctor` y revisa cada aviso. |
+
+La [guía en español](./GUIA.md) tiene ejemplos de comandos, recordatorios,
+packs, Hub y solución de problemas.
+
+<details>
+<summary><b>⌨️ Más comandos</b></summary>
 
 ```bash
-companion --root .companion doctor
+# Revisar el estado y el diagnóstico
+companion --root .companion status
 companion --root .companion doctor --json
-companion --root .companion path
+
+# Consultar logs recientes
 companion --root .companion logs --tail 20
+
+# Procesar una vez los eventos y recordatorios pendientes
+companion --root .companion run --once
+
+# Mostrar una notificación del sistema (requiere el extra opcional)
+python -m pip install --editable '.[notify]'
+companion --root .companion notify "Hola"
 ```
 
-Doctor usa estados honestos: `READY`, `NEEDS_ACTION`, `BLOCKED` y `UNKNOWN`.
-Si no puede comprobar algo, no lo presenta como perfecto.
+</details>
 
-## Arquitectura en una mirada
+<details>
+<summary><b>Para desarrolladores: protocolo y pruebas</b></summary>
 
-```text
-CLI / script / integración local
-              │
-              ▼
-        inbox.jsonl
-              │
-              ▼
-        runtime local
-              │
-              ▼
-       mascota animada
-```
-
-El protocolo es JSONL versionado, append-only y local. La documentación
-técnica completa está en [SPEC.md](SPEC.md).
-
-## Privacidad
-
-Companion funciona localmente, sin cuentas y sin nube. No ejecuta shell, no
-abre red por defecto y no convierte texto de reminders en acciones.
-
-Consulta [SECURITY.md](SECURITY.md) para las garantías y los límites
-verificados.
-
-## Desarrollo
+Companion usa el protocolo versionado `companion-event-v1`: los productores
+agregan eventos JSONL al inbox local y el runtime los procesa en orden. El
+contrato completo está en [`SPEC.md`](./SPEC.md).
 
 ```bash
-python3 -m pytest -q
+python -m pip install --editable '.[test]'
+python -m pytest -q
+python examples/demo_e2e.py
 ```
 
-La suite cubre runtime, protocolo, packs, reminders, GUI, Hub, Doctor,
-personalidad, timeline y hardening.
+GitHub Actions ejecuta las pruebas y el demo en Linux, Windows y macOS con
+Python 3.11, 3.12 y 3.13; después construye el paquete.
 
-El roadmap completo está en [ROADMAP.md](ROADMAP.md). Si quieres contribuir,
-revisa [CONTRIBUTING.md](CONTRIBUTING.md).
+Consulta [`CONTRIBUTING.md`](./CONTRIBUTING.md) para contribuir y
+[`ROADMAP.md`](./ROADMAP.md) para ver el rumbo del proyecto.
+
+</details>
+
+## Licencia
+
+El proyecto usa la [licencia MIT](./LICENSE).
+
