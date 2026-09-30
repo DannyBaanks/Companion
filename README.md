@@ -15,7 +15,7 @@
   <img src="./packs/tabby-shinji-cat/idle.png" alt="Gato tabby de Companion, estilo anime" width="220">
 </p>
 
-**Open Agent Companion** pone una mascotita animada en tu escritorio. Puede
+**Open Agent Companion 1.1.0** pone una mascotita animada en tu escritorio. Puede
 mostrar estados, mensajes y recordatorios; también puede reaccionar a eventos
 de una CLI o de una integración local que tú conectes.
 
@@ -95,6 +95,23 @@ Packs incluidos:
 Si falta una animación opcional, se usa `idle`. Los packs solo describen cómo
 se ve la mascota; no pueden ejecutar acciones.
 
+## Crear arte local desde recetas de agente
+
+Un agente con consola puede escribir una receta de personaje y otra de
+animación; Companion las valida y renderiza sin API de imágenes:
+
+```bash
+python -m pip install -e '.[art]'
+companion art validate examples/vector-neon-cat/character.json
+companion animate render examples/vector-neon-cat/idle.animation.json \
+  --output examples/vector-neon-cat/idle.gif \
+  --atlas examples/vector-neon-cat/idle-atlas.png
+```
+
+La guía del formato y el [ejemplo de Gatito Neón](examples/vector-neon-cat)
+describen el flujo completo. Los assets existentes y los GIF estáticos siguen
+siendo compatibles.
+
 ## ⏰ Recordatorios y timers
 
 ```bash
@@ -116,8 +133,16 @@ Si usas varias mascotas, abre el Hub:
 companion --root .companion hub --theme soft-neon
 ```
 
-Desde ahí puedes crear instancias y mostrar, ocultar, iniciar o detener las
-que administra el Hub. Los temas incluidos son `dark`, `light` y `soft-neon`.
+Desde ahí puedes crear instancias, elegir un pack instalado, mostrar, ocultar,
+iniciar o detener las que administra el Hub. Malbolgato aparece preseleccionado
+al crear una mascota. El selector muestra los packs de `packs/` y
+`.companion/packs/`. Los temas incluidos son `dark`, `light` y `soft-neon`.
+
+Al crearla puedes activar **Allow this pet to run along Companion's preset
+bottom strip**. La opción queda apagada por defecto. Luego, desde el menú del
+gato, usa **Run along preset bottom strip** para recorrer el borde inferior.
+La ruta usa solo medidas fijas de pantalla; no busca ni lee el Dock o la barra
+de tareas.
 
 ## 🔌 Conecta una herramienta local
 
@@ -200,4 +225,3 @@ Consulta [`CONTRIBUTING.md`](./CONTRIBUTING.md) para contribuir y
 ## Licencia
 
 El proyecto usa la [licencia MIT](./LICENSE).
-

@@ -1,4 +1,4 @@
-# Guía de la mascota — Open Agent Companion 1.0.0
+# Guía de la mascota — Open Agent Companion 1.1.0
 
 Esta guía está escrita para quien quiere tener una mascotita virtual en su
 escritorio, no para quien quiere operar una plataforma. Puedes ignorar la
@@ -29,7 +29,7 @@ companion --version
 ```
 
 ```text
-1.0.0
+1.1.0
 ```
 
 ```powershell
@@ -276,10 +276,19 @@ Si tienes más de una mascotita, abre su casita local:
 
     companion --root .companion hub --theme soft-neon
 
-Desde el Hub puedes crear una mascota y usar `Start`, `Hide`, `Show` y `Stop`.
-Esos botones sí controlan la instancia real: `Start` lanza la ventana,
+Desde el Hub puedes crear una mascota y elegir su apariencia entre los packs
+instalados; Malbolgato viene preseleccionado. También puedes usar `Start`,
+`Hide`, `Show` y `Stop`. Esos botones sí controlan la instancia real: `Start` lanza la ventana,
 `Hide` y `Show` publican eventos al runtime, y `Stop` detiene el proceso que
 el Hub inició.
+
+Al crearla puedes dar permiso para que corra por la franja inferior fija de
+Companion. Está desactivado inicialmente. Ya con el gatito abierto, haz clic
+derecho y activa `Allow scripted Dock play (fixed strip)`; después elige
+`Run along preset bottom strip`. El recorrido usa coordenadas calculadas desde
+el tamaño de pantalla y un margen configurado por Companion, sin detectar ni
+consultar el Dock o la barra de tareas. El atlas completo queda incluido en el
+pack para integrar sus demás animaciones después.
 
 Si una instancia no arranca, aparecerá como `failed` y podrás usar `Retry`.
 El Hub no pinta una mascota como `running` solamente porque se pulsó un botón.

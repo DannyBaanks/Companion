@@ -1,5 +1,30 @@
 # Registro de cambios
 
+## 1.1.0 (2026-09-29)
+
+Local pet art and animation engine, Codex sprite rendering, and dock play.
+
+- Art engine: `companion art validate/render/inspect` and
+  `companion animate validate/render` over versioned, data-only recipes
+  (`companion-character-v1`, `companion-animation-v1`, `companion-parts-v1`).
+  Rendering uses local Pillow only; no network, no shell.
+- Packs: optional `spriteSheet` and `dragAnimation` manifest blocks plus
+  action animations (`running-left`, `running-right`, `drag`). The loader
+  validates the grid and rejects escaping paths.
+- Linux: new GTK sprite window renders Codex atlases with native alpha
+  (Tk path still available for GIF packs); Tk windows use the X11 Shape
+  extension for per-frame transparency.
+- Hub: pack selection when creating a companion, plus an opt-in
+  "Allow this pet to run along Companion's preset bottom strip" permission;
+  the strip uses fixed screen coordinates and never queries the Dock.
+- Fix: X11 shape cache kept stale masks when `id()` was recycled; masks are
+  now cached per frame with the frame itself kept alive.
+- Fix: window construction on a headless Linux session no longer pretends
+  X11 shaping is active.
+- Tests: 229 passing. New suites for art recipes, pack sprite sheets,
+  dock play permissions, and Hub dock flags. `Pillow` moved into the
+  `[test]` extra so asset checks run in CI.
+
 ## 1.0.0 (2026-09-10)
 
 First stable release as **Open Agent Companion** (`companion`).
