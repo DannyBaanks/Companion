@@ -1,12 +1,34 @@
 {
   "id": "malbolge-cat",
-  "name": "Malbolge Cat",
+  "name": "Malbolgato",
+  "description": "Gato negro de ojos verde neón, armadura tecnológica y detalles de glitch morado.",
+  "license": "MIT",
+  "palette": ["#17151f", "#c8ff00", "#bd19ff", "#ff3c36"],
+  "preview": "malbolgato-idle.gif",
+  "spriteSheet": {
+    "path": "codex-pet/spritesheet.webp",
+    "cellWidth": 192,
+    "cellHeight": 208,
+    "columns": 8,
+    "floorOffset": 203
+  },
+  "dragAnimation": {
+    "path": "codex-pet/malbolgato-carry.png",
+    "cellWidth": 192,
+    "cellHeight": 336,
+    "columns": 8,
+    "floorOffset": 324,
+    "previewGif": "malbolgato-carry.gif"
+  },
   "animations": {
-    "idle": "idle.gif",
-    "thinking": "thinking.gif",
-    "working": "working.gif",
-    "success": "success.gif",
-    "error": "error.gif",
-    "waiting": "waiting.gif"
+    "idle": "malbolgato-idle.gif",
+    "thinking": "malbolgato-thinking.gif",
+    "working": "malbolgato-working.gif",
+    "success": "malbolgato-success.gif",
+    "error": "malbolgato-error.gif",
+    "waiting": "malbolgato-waiting.gif",
+    "running-right": "malbolgato-running-right.gif",
+    "running-left": "malbolgato-running-left.gif",
+    "drag": "malbolgato-carry.gif"
   }
 }
