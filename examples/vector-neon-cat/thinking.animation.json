@@ -1,0 +1,16 @@
+{
+  "schema": "companion-animation-v1", "id": "thinking", "character": "character.json",
+  "durationMs": 1440, "frameDurationMs": 120, "loop": true, "tracks": [
+    { "layer": "$head", "keyframes": [
+      { "atMs": 0, "rotation": 0, "easing": "smoothstep" },
+      { "atMs": 480, "rotation": -4, "easing": "smoothstep" },
+      { "atMs": 960, "rotation": 0, "easing": "smoothstep" },
+      { "atMs": 1440, "rotation": 0 }
+    ]},
+    { "layer": "$tail", "keyframes": [
+      { "atMs": 0, "rotation": -4, "easing": "smoothstep" },
+      { "atMs": 720, "rotation": 8, "easing": "smoothstep" },
+      { "atMs": 1440, "rotation": -4 }
+    ]}
+  ]
+}

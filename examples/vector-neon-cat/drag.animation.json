@@ -1,0 +1,20 @@
+{
+  "schema": "companion-animation-v1", "id": "drag", "character": "character.json",
+  "durationMs": 960, "frameDurationMs": 120, "loop": true, "tracks": [
+    { "layer": "$front-paws", "keyframes": [
+      { "atMs": 0, "y": -10, "rotation": -12, "easing": "smoothstep" },
+      { "atMs": 480, "y": -12, "rotation": -18, "easing": "smoothstep" },
+      { "atMs": 960, "y": -10, "rotation": -12 }
+    ]},
+    { "layer": "$head", "keyframes": [
+      { "atMs": 0, "y": 1, "rotation": -3, "easing": "smoothstep" },
+      { "atMs": 480, "y": -1, "rotation": 3, "easing": "smoothstep" },
+      { "atMs": 960, "y": 1, "rotation": -3 }
+    ]},
+    { "layer": "$tail", "keyframes": [
+      { "atMs": 0, "rotation": 4, "easing": "smoothstep" },
+      { "atMs": 480, "rotation": -8, "easing": "smoothstep" },
+      { "atMs": 960, "rotation": 4 }
+    ]}
+  ]
+}

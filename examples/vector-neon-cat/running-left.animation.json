@@ -1,0 +1,24 @@
+{
+  "schema": "companion-animation-v1", "id": "running-left", "character": "character.json",
+  "durationMs": 960, "frameDurationMs": 120, "loop": true, "flipX": true, "tracks": [
+    { "layer": "$body", "keyframes": [
+      { "atMs": 0, "y": 0, "easing": "smoothstep" },
+      { "atMs": 240, "y": -8, "easing": "smoothstep" },
+      { "atMs": 480, "y": 0, "easing": "smoothstep" },
+      { "atMs": 720, "y": -8, "easing": "smoothstep" },
+      { "atMs": 960, "y": 0 }
+    ]},
+    { "layer": "$front-paws", "keyframes": [
+      { "atMs": 0, "rotation": -20, "easing": "smoothstep" },
+      { "atMs": 240, "rotation": 20, "easing": "smoothstep" },
+      { "atMs": 480, "rotation": -20, "easing": "smoothstep" },
+      { "atMs": 720, "rotation": 20, "easing": "smoothstep" },
+      { "atMs": 960, "rotation": -20 }
+    ]},
+    { "layer": "$tail", "keyframes": [
+      { "atMs": 0, "rotation": -20, "easing": "smoothstep" },
+      { "atMs": 480, "rotation": 20, "easing": "smoothstep" },
+      { "atMs": 960, "rotation": -20 }
+    ]}
+  ]
+}

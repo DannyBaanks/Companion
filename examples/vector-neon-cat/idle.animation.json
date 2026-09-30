@@ -1,0 +1,39 @@
+{
+  "schema": "companion-animation-v1",
+  "id": "idle",
+  "character": "character.json",
+  "durationMs": 1440,
+  "frameDurationMs": 120,
+  "frameColumns": 8,
+  "loop": true,
+  "tracks": [
+    {
+      "layer": "$tail",
+      "keyframes": [
+        { "atMs": 0, "rotation": -10, "easing": "smoothstep" },
+        { "atMs": 360, "rotation": 10, "easing": "smoothstep" },
+        { "atMs": 720, "rotation": -10, "easing": "smoothstep" },
+        { "atMs": 1080, "rotation": 10, "easing": "smoothstep" },
+        { "atMs": 1440, "rotation": -10 }
+      ]
+    },
+    {
+      "layer": "$eyes-open",
+      "keyframes": [
+        { "atMs": 0, "visible": true },
+        { "atMs": 720, "visible": false },
+        { "atMs": 840, "visible": true },
+        { "atMs": 1440, "visible": true }
+      ]
+    },
+    {
+      "layer": "$eyes-closed",
+      "keyframes": [
+        { "atMs": 0, "visible": false },
+        { "atMs": 720, "visible": true },
+        { "atMs": 840, "visible": false },
+        { "atMs": 1440, "visible": false }
+      ]
+    }
+  ]
+}

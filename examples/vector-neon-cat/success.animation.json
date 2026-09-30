@@ -1,0 +1,19 @@
+{
+  "schema": "companion-animation-v1", "id": "success", "character": "character.json",
+  "durationMs": 1440, "frameDurationMs": 120, "loop": true, "tracks": [
+    { "layer": "$body", "keyframes": [
+      { "atMs": 0, "y": 0, "easing": "smoothstep" },
+      { "atMs": 360, "y": -12, "easing": "smoothstep" },
+      { "atMs": 720, "y": 0, "easing": "smoothstep" },
+      { "atMs": 1080, "y": -8, "easing": "smoothstep" },
+      { "atMs": 1440, "y": 0 }
+    ]},
+    { "layer": "$head", "keyframes": [
+      { "atMs": 0, "y": 0, "rotation": 0, "easing": "smoothstep" },
+      { "atMs": 360, "y": -12, "rotation": -7, "easing": "smoothstep" },
+      { "atMs": 720, "y": 0, "rotation": 0, "easing": "smoothstep" },
+      { "atMs": 1080, "y": -8, "rotation": 7, "easing": "smoothstep" },
+      { "atMs": 1440, "y": 0, "rotation": 0 }
+    ]}
+  ]
+}

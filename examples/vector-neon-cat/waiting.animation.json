@@ -1,0 +1,15 @@
+{
+  "schema": "companion-animation-v1", "id": "waiting", "character": "character.json",
+  "durationMs": 1440, "frameDurationMs": 120, "loop": true, "tracks": [
+    { "layer": "$head", "keyframes": [
+      { "atMs": 0, "rotation": 2, "easing": "smoothstep" },
+      { "atMs": 720, "rotation": -2, "easing": "smoothstep" },
+      { "atMs": 1440, "rotation": 2 }
+    ]},
+    { "layer": "$tail", "keyframes": [
+      { "atMs": 0, "rotation": -7, "easing": "smoothstep" },
+      { "atMs": 720, "rotation": 7, "easing": "smoothstep" },
+      { "atMs": 1440, "rotation": -7 }
+    ]}
+  ]
+}

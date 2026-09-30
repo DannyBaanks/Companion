@@ -1,0 +1,109 @@
+{
+  "schema": "companion-character-v1",
+  "id": "vector-neon-cat",
+  "name": "Gatito Neón",
+  "canvas": { "width": 192, "height": 208, "anchor": [96, 203] },
+  "libraries": ["parts/feline-v1.json"],
+  "rig": {
+    "body": "body",
+    "head": "head",
+    "tail": "tail",
+    "front-paws": "front-paws",
+    "eyes-open": "eyes-open",
+    "eyes-closed": "eyes-closed"
+  },
+  "palette": {
+    "ink": "#17151F",
+    "fur": "#24212E",
+    "shadow": "#111018",
+    "lime": "#C8FF00",
+    "purple": "#BD19FF",
+    "pink": "#FF3C78",
+    "steel": "#585462",
+    "light": "#F4F0FB"
+  },
+  "layers": [
+    {
+      "id": "tail",
+      "pivot": [61, 151],
+      "shapes": [
+        { "type": "path", "commands": [["M", 68, 153], ["C", 45, 157, 35, 139, 39, 121], ["C", 42, 104, 58, 98, 66, 110], ["C", 73, 122, 58, 128, 52, 119]], "fill": null, "stroke": "ink", "strokeWidth": 18 },
+        { "type": "path", "commands": [["M", 68, 153], ["C", 45, 157, 35, 139, 39, 121], ["C", 42, 104, 58, 98, 66, 110], ["C", 73, 122, 58, 128, 52, 119]], "fill": null, "stroke": "lime", "strokeWidth": 6 },
+        { "type": "part", "part": "feline-tail-band", "bounds": [37, 132, 19, 13], "rotation": 5, "colors": { "accent": "lime", "outline": "ink" } },
+        { "type": "part", "part": "feline-tail-band", "bounds": [37, 114, 19, 13], "rotation": -12, "colors": { "accent": "lime", "outline": "ink" } }
+      ]
+    },
+    {
+      "id": "body",
+      "pivot": [96, 148],
+      "shapes": [
+        { "type": "path", "commands": [["M", 63, 147], ["C", 66, 126, 78, 117, 99, 119], ["C", 125, 117, 142, 131, 143, 153], ["L", 137, 174], ["C", 132, 183, 115, 187, 96, 184], ["C", 74, 185, 62, 173, 63, 147], ["Z"]], "fill": "fur", "stroke": "ink", "strokeWidth": 4 },
+        { "type": "ellipse", "bounds": [72, 158, 48, 19], "fill": "shadow" },
+        { "type": "path", "commands": [["M", 71, 170], ["C", 69, 183, 81, 190, 94, 187], ["L", 101, 184], ["L", 100, 172], ["Z"]], "fill": "fur", "stroke": "ink", "strokeWidth": 3 },
+        { "type": "path", "commands": [["M", 116, 171], ["C", 112, 185, 122, 190, 134, 184], ["L", 140, 175], ["L", 135, 165], ["Z"]], "fill": "fur", "stroke": "ink", "strokeWidth": 3 }
+      ]
+    },
+    {
+      "id": "chest-plate",
+      "pivot": [100, 148],
+      "shapes": [
+        { "type": "part", "part": "tech-chest-badge", "bounds": [78, 126, 48, 52], "colors": { "metal": "steel", "outline": "ink", "accent": "lime", "shadow": "shadow" } },
+        { "type": "path", "commands": [["M", 84, 160], ["L", 92, 166], ["M", 117, 160], ["L", 110, 166]], "fill": null, "stroke": "purple", "strokeWidth": 3 }
+      ]
+    },
+    {
+      "id": "head",
+      "pivot": [99, 91],
+      "shapes": [
+        { "type": "polygon", "points": [[67, 75], [62, 42], [87, 59], [104, 55], [132, 35], [128, 73]], "fill": "fur", "stroke": "ink", "strokeWidth": 4 },
+        { "type": "part", "part": "feline-ear-inset", "bounds": [66, 45, 18, 21], "colors": { "accent": "lime", "highlight": "light" } },
+        { "type": "part", "part": "feline-ear-inset", "bounds": [114, 39, 16, 23], "flipX": true, "colors": { "accent": "purple", "highlight": "light" } },
+        { "type": "path", "commands": [["M", 66, 83], ["C", 68, 65, 82, 56, 101, 57], ["C", 123, 54, 138, 68, 138, 89], ["C", 140, 111, 126, 127, 103, 128], ["C", 80, 130, 64, 114, 66, 83], ["Z"]], "fill": "fur", "stroke": "ink", "strokeWidth": 4 },
+        { "type": "path", "commands": [["M", 79, 70], ["L", 89, 76], ["M", 116, 70], ["L", 126, 64]], "fill": null, "stroke": "shadow", "strokeWidth": 3 }
+      ]
+    },
+    {
+      "id": "eyes-open",
+      "pivot": [101, 95],
+      "shapes": [
+        { "type": "part", "part": "feline-eye", "bounds": [77, 80, 23, 30], "colors": { "accent": "lime", "outline": "ink", "pupil": "ink", "highlight": "light" } },
+        { "type": "part", "part": "feline-eye", "bounds": [109, 80, 23, 30], "flipX": true, "colors": { "accent": "lime", "outline": "ink", "pupil": "ink", "highlight": "light" } }
+      ]
+    },
+    {
+      "id": "eyes-closed",
+      "pivot": [101, 95],
+      "visible": false,
+      "shapes": [
+        { "type": "path", "commands": [["M", 79, 95], ["C", 84, 101, 92, 101, 98, 95], ["M", 111, 95], ["C", 117, 101, 124, 101, 130, 95]], "fill": null, "stroke": "lime", "strokeWidth": 4 }
+      ]
+    },
+    {
+      "id": "face",
+      "pivot": [101, 106],
+      "shapes": [
+        { "type": "part", "part": "feline-muzzle", "bounds": [91, 105, 24, 20], "colors": { "nose": "pink", "mouth": "pink" } },
+        { "type": "path", "commands": [["M", 73, 108], ["L", 57, 104], ["M", 74, 114], ["L", 58, 117], ["M", 130, 108], ["L", 145, 103], ["M", 130, 114], ["L", 145, 117]], "fill": null, "stroke": "lime", "strokeWidth": 2 }
+      ]
+    },
+    {
+      "id": "front-paws",
+      "pivot": [100, 169],
+      "shapes": [
+        { "type": "part", "part": "feline-paw", "bounds": [77, 164, 32, 21], "colors": { "fur": "fur", "outline": "ink", "claw": "lime" } },
+        { "type": "part", "part": "feline-paw", "bounds": [109, 164, 32, 21], "flipX": true, "colors": { "fur": "fur", "outline": "ink", "claw": "lime" } }
+      ]
+    },
+    {
+      "id": "glitch",
+      "pivot": [131, 78],
+      "shapes": [
+        { "type": "rect", "bounds": [134, 51, 3, 7], "fill": "purple" },
+        { "type": "rect", "bounds": [140, 46, 4, 3], "fill": "purple" },
+        { "type": "rect", "bounds": [142, 57, 5, 3], "fill": "purple" },
+        { "type": "rect", "bounds": [137, 64, 3, 5], "fill": "purple" },
+        { "type": "path", "commands": [["M", 72, 135], ["L", 79, 132], ["M", 126, 138], ["L", 133, 134]], "fill": null, "stroke": "lime", "strokeWidth": 3 }
+      ]
+    }
+  ]
+}

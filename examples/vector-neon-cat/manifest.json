@@ -1,0 +1,19 @@
+{
+  "id": "vector-neon-cat",
+  "name": "Gatito Neón",
+  "description": "Mascota vectorial local generada desde una receta de agente.",
+  "license": "MIT",
+  "palette": ["#17151F", "#C8FF00", "#BD19FF", "#FF3C78"],
+  "preview": "idle.gif",
+  "animations": {
+    "idle": "idle.gif",
+    "thinking": "thinking.gif",
+    "working": "working.gif",
+    "waiting": "waiting.gif",
+    "success": "success.gif",
+    "error": "error.gif",
+    "running-right": "running-right.gif",
+    "running-left": "running-left.gif",
+    "drag": "drag.gif"
+  }
+}

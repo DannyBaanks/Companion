@@ -1,0 +1,56 @@
+{
+  "schema": "companion-parts-v1",
+  "id": "feline-anatomy-v1",
+  "parts": {
+    "feline-eye": {
+      "canvas": [24, 30],
+      "colors": ["accent", "outline", "pupil", "highlight"],
+      "shapes": [
+        { "type": "ellipse", "bounds": [2, 2, 20, 26], "fill": "$accent", "stroke": "$outline", "strokeWidth": 2 },
+        { "type": "ellipse", "bounds": [10, 7, 6, 17], "fill": "$pupil" },
+        { "type": "ellipse", "bounds": [6, 7, 5, 5], "fill": "$highlight" }
+      ]
+    },
+    "feline-paw": {
+      "canvas": [32, 20],
+      "colors": ["fur", "outline", "claw"],
+      "shapes": [
+        { "type": "ellipse", "bounds": [2, 1, 28, 17], "fill": "$fur", "stroke": "$outline", "strokeWidth": 3 },
+        { "type": "path", "commands": [["M", 11, 12], ["L", 11, 17], ["M", 20, 12], ["L", 20, 17]], "fill": null, "stroke": "$claw", "strokeWidth": 2 }
+      ]
+    },
+    "feline-ear-inset": {
+      "canvas": [24, 24],
+      "colors": ["accent", "highlight"],
+      "shapes": [
+        { "type": "polygon", "points": [[2, 22], [2, 2], [22, 14]], "fill": "$accent" },
+        { "type": "path", "commands": [["M", 6, 17], ["L", 6, 7], ["L", 16, 14]], "fill": null, "stroke": "$highlight", "strokeWidth": 2 }
+      ]
+    },
+    "tech-chest-badge": {
+      "canvas": [32, 36],
+      "colors": ["metal", "outline", "accent", "shadow"],
+      "shapes": [
+        { "type": "polygon", "points": [[3, 2], [27, 2], [31, 18], [24, 34], [8, 34], [1, 17]], "fill": "$metal", "stroke": "$outline", "strokeWidth": 3 },
+        { "type": "polygon", "points": [[9, 10], [23, 10], [26, 23], [11, 23]], "fill": "$shadow", "stroke": "$accent", "strokeWidth": 2 },
+        { "type": "rect", "bounds": [13, 14, 9, 6], "fill": "$accent" }
+      ]
+    },
+    "feline-muzzle": {
+      "canvas": [24, 22],
+      "colors": ["nose", "mouth"],
+      "shapes": [
+        { "type": "polygon", "points": [[8, 2], [16, 2], [12, 7]], "fill": "$nose" },
+        { "type": "path", "commands": [["M", 12, 7], ["C", 9, 15, 3, 13, 2, 9], ["M", 12, 7], ["C", 15, 15, 21, 13, 22, 9]], "fill": null, "stroke": "$mouth", "strokeWidth": 2 }
+      ]
+    },
+    "feline-tail-band": {
+      "canvas": [20, 14],
+      "colors": ["accent", "outline"],
+      "shapes": [
+        { "type": "path", "commands": [["M", 4, 7], ["C", 7, 2, 12, 12, 16, 6]], "fill": null, "stroke": "$outline", "strokeWidth": 8 },
+        { "type": "path", "commands": [["M", 4, 7], ["C", 7, 2, 12, 12, 16, 6]], "fill": null, "stroke": "$accent", "strokeWidth": 4 }
+      ]
+    }
+  }
+}
