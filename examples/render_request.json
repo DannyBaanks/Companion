@@ -13,12 +13,18 @@
     "working",
     "success",
     "error",
-    "waiting"
+    "waiting",
+    "running-right",
+    "running-left",
+    "drag"
   ],
   "output": {
-    "cell_size": [128, 128]
+    "cell_size": [
+      128,
+      128
+    ]
   },
   "renderer": {
-    "notes": "Keep the silhouette readable at small desktop-companion size."
+    "notes": "Keep the silhouette readable at small desktop-companion size. Running and drag cells follow the Codex v2 grid: 192x208 cells, 8 columns."
   }
 }

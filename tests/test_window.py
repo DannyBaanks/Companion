@@ -149,9 +149,13 @@ class FakeCanvas:
         self.kw = kw
         self._items = []
         self._tag_counter = 0
+        self.forgotten = False
 
     def pack(self, **_kw):
-        pass
+        self.forgotten = False
+
+    def pack_forget(self):
+        self.forgotten = True
 
     def configure(self, **kw):
         self.kw.update(kw)
@@ -168,6 +172,9 @@ class FakeCanvas:
 
 
 def make_window(monkeypatch, tmp_path: Path, **options):
+    # Keep tests hermetic: the X11 shape path requires a real display, so
+    # simulate the Tk host (Windows/macOS) where the glow canvas is used.
+    monkeypatch.setattr("companion.window.platform_name", lambda: "windows")
     monkeypatch.setattr("companion.window.tk.Tk", FakeRoot)
     monkeypatch.setattr("companion.window.tk.Label", FakeLabel)
     monkeypatch.setattr("companion.window.tk.BooleanVar", FakeBooleanVar)
@@ -462,3 +469,106 @@ def test_theme_checkbutton_reflects_current(monkeypatch, tmp_path):
             break
     else:
         raise AssertionError("Theme cascade not found")
+
+
+# ── Dock play (scripted bottom strip) ────────────────────────────────────────
+
+
+def _dock_pack(tmp_path: Path):
+    root = tmp_path / "runner"
+    root.mkdir()
+    for name in ("idle.ppm", "run-right.ppm", "run-left.ppm"):
+        (root / name).write_text("P3\n1 1\n255\n0 255 0\n", encoding="ascii")
+    (root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "id": "runner",
+                "name": "Runner",
+                "animations": {
+                    "idle": "idle.ppm",
+                    "running-right": "run-right.ppm",
+                    "running-left": "run-left.ppm",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return AssetPack.load(root)
+
+
+def make_dock_window(monkeypatch, tmp_path: Path):
+    class FakeAsset:
+        def __init__(self, path):
+            self.path = path
+            self.current = object()
+
+        def advance(self, now=None):
+            pass
+
+        def reset(self):
+            pass
+
+    monkeypatch.setattr("companion.window.AnimatedAsset", FakeAsset)
+    return make_window(monkeypatch, tmp_path, pack=_dock_pack(tmp_path))
+
+
+def test_dock_run_requires_permission(monkeypatch, tmp_path):
+    window = make_dock_window(monkeypatch, tmp_path)
+    assert window.toggle_dock_run() is False
+    assert window._dock_running is False
+    assert window.dock_running_var.get() is False
+
+
+def test_dock_run_requires_running_animations(monkeypatch, tmp_path):
+    window = make_window(monkeypatch, tmp_path)
+    window.allow_dock_games = True
+    window.dock_games_var.set(True)
+    assert window.toggle_dock_run() is False  # no pack → no running animations
+
+
+def test_dock_run_starts_and_stops_with_permission(monkeypatch, tmp_path):
+    window = make_dock_window(monkeypatch, tmp_path)
+    window.allow_dock_games = True
+    window.dock_games_var.set(True)
+
+    assert window.toggle_dock_run() is True
+    assert window._dock_running is True
+    assert window._active_animation_action == "running-right"
+
+    # Toggling again stops the run.
+    assert window.toggle_dock_run() is False
+    assert window._dock_running is False
+    assert window._active_animation_action is None
+
+
+def test_dock_run_blocked_when_visibility_off(monkeypatch, tmp_path):
+    window = make_dock_window(monkeypatch, tmp_path)
+    window.allow_dock_games = True
+    window.dock_games_var.set(True)
+    assert window.toggle_dock_run() is True
+
+    window.runtime.state["visible"] = False
+    window._refresh()
+    assert window._dock_running is False
+
+
+def test_disabling_permission_stops_dock_run(monkeypatch, tmp_path):
+    window = make_dock_window(monkeypatch, tmp_path)
+    window.allow_dock_games = True
+    window.dock_games_var.set(True)
+    assert window.toggle_dock_run() is True
+
+    window.dock_games_var.set(False)
+    assert window.toggle_dock_games() is False
+    assert window._dock_running is False
+
+
+def test_drag_stops_dock_run(monkeypatch, tmp_path):
+    window = make_dock_window(monkeypatch, tmp_path)
+    window.allow_dock_games = True
+    window.dock_games_var.set(True)
+    assert window.toggle_dock_run() is True
+
+    event = type("Event", (), {"x_root": 25, "y_root": 50})()  # type: ignore[arg-type]
+    window._drag_start(event)
+    assert window._dock_running is False

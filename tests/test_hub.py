@@ -164,3 +164,63 @@ def test_hub_controller_lifecycle_publishes_events(tmp_path):
 
     controller.stop(entry)
     assert store.get_companion("c1").status == "stopped"
+
+
+def test_hub_entry_roundtrips_dock_play_allowed(tmp_path):
+    store = HubStore(tmp_path)
+    entry = store.create_companion("Runner", dock_play_allowed=True, data_root=tmp_path)
+    assert entry.dock_play_allowed is True
+
+    restored = store.get_companion(entry.companion_id)
+    assert restored is not None
+    assert restored.dock_play_allowed is True
+
+    store.update_status(entry.companion_id, "stopped")
+    again = store.get_companion(entry.companion_id)
+    assert again is not None and again.dock_play_allowed is True
+
+
+def test_hub_controller_command_includes_dock_permission(tmp_path):
+    class FakeProcess:
+        def __init__(self, command, cwd):
+            self.command = command
+            self.cwd = cwd
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout=None):
+            return 0
+
+    store = HubStore(tmp_path)
+    entry = store.create_companion("Runner", dock_play_allowed=True, data_root=tmp_path)
+    processes = []
+
+    def spawn(command, cwd):
+        process = FakeProcess(command, cwd)
+        processes.append(process)
+        return process
+
+    controller = HubController(store, python_executable="python", process_factory=spawn)
+    controller.start(entry)
+    assert "--allow-dock-games" in processes[0].command
+
+    plain = store.create_companion("Calm", data_root=tmp_path)
+    controller.start(plain)
+    assert "--allow-dock-games" not in processes[1].command
+
+
+def test_hub_state_roundtrips_dock_play_flag():
+    state = HubState(
+        companions=[
+            CompanionEntry("c1", "Terra", pack_id="cat", status="running"),
+            CompanionEntry("c2", "Runner", status="stopped", dock_play_allowed=True),
+        ],
+        first_run=False,
+    )
+    restored = HubState.from_dict(state.to_dict())
+    assert restored.companions[0].dock_play_allowed is False
+    assert restored.companions[1].dock_play_allowed is True

@@ -23,6 +23,7 @@ from .window import launch
 from .adapters.hooks import forward_stream
 from .adapters.notify import notify
 from .adapters.pomodoro import plan_pomodoro
+from .art import ArtError, load_animation, load_character
 
 
 def _root(value: str | None) -> Path:
@@ -89,12 +90,30 @@ def build_parser() -> argparse.ArgumentParser:
     gui.add_argument("--asset", type=Path)
     gui.add_argument("--name", default="Companion")
     gui.add_argument("--pack", type=Path)
+    gui.add_argument("--allow-dock-games", action="store_true", help="allow scripted play in Companion's fixed bottom strip")
     gui.add_argument("--config", type=Path)
     gui.add_argument("--theme", default=None, help="presentation theme: dark, light, soft-neon")
     pack = sub.add_parser("pack")
     pack_sub = pack.add_subparsers(dest="pack_command", required=True)
     validate = pack_sub.add_parser("validate")
     validate.add_argument("path", type=Path)
+    art = sub.add_parser("art", help="validate, render, or inspect a local vector character recipe")
+    art_sub = art.add_subparsers(dest="art_command", required=True)
+    art_validate = art_sub.add_parser("validate")
+    art_validate.add_argument("path", type=Path)
+    art_render = art_sub.add_parser("render")
+    art_render.add_argument("path", type=Path)
+    art_render.add_argument("--output", required=True, type=Path)
+    art_inspect = art_sub.add_parser("inspect")
+    art_inspect.add_argument("path", type=Path)
+    animate = sub.add_parser("animate", help="validate or render a local animation recipe")
+    animate_sub = animate.add_subparsers(dest="animate_command", required=True)
+    animate_validate = animate_sub.add_parser("validate")
+    animate_validate.add_argument("path", type=Path)
+    animate_render = animate_sub.add_parser("render")
+    animate_render.add_argument("path", type=Path)
+    animate_render.add_argument("--output", required=True, type=Path)
+    animate_render.add_argument("--atlas", type=Path)
     render_request = sub.add_parser("render-request", help="validate a renderer request document")
     render_request_sub = render_request.add_subparsers(dest="render_request_command", required=True)
     render_request_validate = render_request_sub.add_parser("validate")
@@ -121,6 +140,51 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         print(json.dumps(request, ensure_ascii=True))
+        return 0
+    if args.command == "art":
+        from .art.render import inspect_image, render_character
+
+        try:
+            if args.art_command == "validate":
+                character = load_character(args.path)
+                result = {
+                    "id": character.data["id"],
+                    "name": character.data["name"],
+                    "width": character.width,
+                    "height": character.height,
+                    "layers": len(character.data["layers"]),
+                    "partsAvailable": sorted(character.data.get("parts", {})),
+                    "anchor": list(character.anchor),
+                }
+            elif args.art_command == "render":
+                character = load_character(args.path)
+                result = render_character(character, args.output)
+            else:
+                result = inspect_image(args.path)
+        except ArtError as exc:
+            print(json.dumps({"error": str(exc)}, ensure_ascii=True), file=sys.stderr)
+            return 2
+        print(json.dumps(result, ensure_ascii=True))
+        return 0
+    if args.command == "animate":
+        from .art.animation import render_animation
+
+        try:
+            animation = load_animation(args.path)
+            if args.animate_command == "validate":
+                result = {
+                    "id": animation.data["id"],
+                    "character": animation.character.data["id"],
+                    "frames": animation.frame_count,
+                    "durationMs": animation.data["durationMs"],
+                    "loop": animation.data["loop"],
+                }
+            else:
+                result = render_animation(animation, args.output, args.atlas)
+        except ArtError as exc:
+            print(json.dumps({"error": str(exc)}, ensure_ascii=True), file=sys.stderr)
+            return 2
+        print(json.dumps(result, ensure_ascii=True))
         return 0
     root = _root(args.root)
     runtime = Runtime(root, companion_id=args.companion_id)
@@ -267,6 +331,7 @@ def main(argv: list[str] | None = None) -> int:
             opacity=config.opacity if config else 1.0,
             show_messages=config.show_messages if config else True,
             pack_name=config.pack_name if config else None,
+            allow_dock_games=args.allow_dock_games,
             theme=get_theme(args.theme or (config.theme if config else "dark")),
         )
         return 0

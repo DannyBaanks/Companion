@@ -30,6 +30,7 @@ class CompanionEntry:
     status: str = "stopped"  # starting | running | hidden | stopping | stopped | failed
     last_activity: str | None = None
     root: Path | None = None
+    dock_play_allowed: bool = False
 
 
 @dataclass
@@ -46,6 +47,7 @@ class HubState:
                     "name": c.name,
                     "pack_id": c.pack_id,
                     "pack_name": c.pack_name,
+                    "dock_play_allowed": c.dock_play_allowed,
                     "status": c.status,
                     "last_activity": c.last_activity,
                 }
@@ -63,6 +65,7 @@ class HubState:
                 name=item.get("name", item["companion_id"]),
                 pack_id=item.get("pack_id"),
                 pack_name=item.get("pack_name"),
+                dock_play_allowed=bool(item.get("dock_play_allowed", False)),
                 status=item.get("status", "stopped"),
                 last_activity=item.get("last_activity"),
             ))
@@ -92,12 +95,17 @@ class HubStore:
     def discover_packs(self, pack_dirs: list[Path] | None = None) -> list[AssetPack]:
         """Find and validate all packs in the given directories."""
         if pack_dirs is None:
-            pack_dirs = [self.root / "packs"]
+            project_root = Path(__file__).resolve().parents[2]
+            bundled_root = Path(getattr(sys, "_MEIPASS", project_root))
+            pack_dirs = [project_root / "packs", bundled_root / "packs", self.root / "packs"]
         packs: list[AssetPack] = []
+        seen: set[Path] = set()
         for base in pack_dirs:
-            if not base.is_dir():
+            resolved_base = base.resolve()
+            if resolved_base in seen or not resolved_base.is_dir():
                 continue
-            for child in sorted(base.iterdir()):
+            seen.add(resolved_base)
+            for child in sorted(resolved_base.iterdir()):
                 if child.is_dir() and (child / "manifest.json").exists():
                     try:
                         packs.append(AssetPack.load(child))
@@ -105,11 +113,16 @@ class HubStore:
                         continue
         return packs
 
+    def find_pack(self, pack_id: str) -> AssetPack | None:
+        """Resolve a saved pack selection from installed and user pack folders."""
+        return next((pack for pack in self.discover_packs() if pack.pack_id == pack_id), None)
+
     def create_companion(
         self,
         name: str,
         pack: AssetPack | None = None,
         data_root: Path | None = None,
+        dock_play_allowed: bool = False,
     ) -> CompanionEntry:
         """Create a new companion entry and initialize its state."""
         state = self.load()
@@ -125,6 +138,7 @@ class HubStore:
             name=name,
             pack_id=pack.pack_id if pack else None,
             pack_name=pack.name if pack else None,
+            dock_play_allowed=dock_play_allowed,
             status="stopped",
         )
         state.companions.append(entry)
@@ -192,7 +206,7 @@ class HubController:
         return root
 
     def command(self, entry: CompanionEntry) -> list[str]:
-        return [
+        command = [
             self.python_executable,
             "-m",
             "companion.cli",
@@ -204,6 +218,13 @@ class HubController:
             "--name",
             entry.name,
         ]
+        if entry.pack_id:
+            pack = self.store.find_pack(entry.pack_id)
+            if pack is not None:
+                command.extend(["--pack", str(pack.root)])
+        if entry.dock_play_allowed:
+            command.append("--allow-dock-games")
+        return command
 
     def start(self, entry: CompanionEntry) -> bool:
         existing = self._processes.get(entry.companion_id)
@@ -219,7 +240,7 @@ class HubController:
         try:
             process = self.process_factory(
                 self.command(entry),
-                cwd=str(self.store.root),
+                cwd=str(Path(__file__).resolve().parents[2]),
             )
         except OSError as exc:
             self.store.update_status(entry.companion_id, "failed", str(exc))

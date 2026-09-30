@@ -24,3 +24,6 @@ logs.jsonl
 Thumbs.db
 .vscode/
 .idea/
+
+# Local agent tooling state (contains session tokens)
+.superpowers/

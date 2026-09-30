@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .pack import PACK_ANIMATIONS
 from .protocol import STATES
 
 
@@ -43,9 +44,13 @@ def validate_render_request(data: object) -> dict[str, object]:
         states = data["states"]
         if not isinstance(states, list):
             raise RenderRequestError("states must be a list")
-        known_states = ", ".join(sorted(STATES))
+        # Render requests may name any animation a pack can ship, including
+        # the action animations (running/drag); runtime-only states like
+        # "hidden" stay valid for backwards compatibility.
+        allowed = STATES | PACK_ANIMATIONS
+        known_states = ", ".join(sorted(allowed))
         for index, state in enumerate(states):
-            if not isinstance(state, str) or state not in STATES:
+            if not isinstance(state, str) or state not in allowed:
                 raise RenderRequestError(f"states[{index}] must be one of: {known_states}")
 
     if "output" in data:

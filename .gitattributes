@@ -1,0 +1,12 @@
+# Normalize line endings: text files are committed with LF in the repo;
+# git converts to the native ending only on checkout where needed.
+* text=auto
+
+# Windows build script keeps its native CRLF
+*.ps1 text eol=crlf
+
+# Binary assets — never touch line endings
+*.gif binary
+*.png binary
+*.webp binary
+*.ico binary

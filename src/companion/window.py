@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import ctypes
+import ctypes.util
 import re
 import tkinter as tk
 from tkinter import filedialog
@@ -33,6 +35,88 @@ def _tk_color(hex_color: str) -> str:
 
 def _lerp_color(c1: tuple[int, int, int], c2: tuple[int, int, int], t: float) -> tuple[int, int, int]:
     return tuple(int(a + (b - a) * t) for a, b in zip(c1, c2))  # type: ignore[return-value]
+
+
+class _X11Shape:
+    """Use the X11 Shape extension to remove transparent pixels on Linux."""
+
+    class Rectangle(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_short), ("y", ctypes.c_short),
+                    ("width", ctypes.c_ushort), ("height", ctypes.c_ushort)]
+
+    def __init__(self):
+        self.x11 = ctypes.CDLL(ctypes.util.find_library("X11") or "libX11.so.6")
+        self.xext = ctypes.CDLL(ctypes.util.find_library("Xext") or "libXext.so.6")
+        self.x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        self.x11.XOpenDisplay.restype = ctypes.c_void_p
+        self.x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        self.x11.XFlush.argtypes = [ctypes.c_void_p]
+        self.xdisplay = self.x11.XOpenDisplay(None)
+        self.xext.XShapeCombineRectangles.argtypes = [
+            ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, ctypes.POINTER(self.Rectangle), ctypes.c_int,
+            ctypes.c_int, ctypes.c_int,
+        ]
+        if not self.xdisplay:
+            # No X server (headless test runner, SSH session): the shape
+            # fallback is unavailable. Raise so callers treat this as absent.
+            self.close()
+            raise OSError("X11 shape support unavailable: no display")
+        # Cache the silhouette per frame, keeping the frame itself in each
+        # entry so a recycled id() can never alias two different PhotoImages.
+        self._mask_cache: dict[int, tuple[tk.PhotoImage, tuple[tuple[int, int, int, int], ...]]] = {}
+        self._last_applied: tuple[tk.PhotoImage, tuple[tuple[int, int, int, int], ...]] | None = None
+
+    def _frame_mask(self, frame: tk.PhotoImage) -> tuple[tuple[int, int, int, int], ...]:
+        key = id(frame)
+        cached = self._mask_cache.get(key)
+        if cached is not None and cached[0] is frame:
+            return cached[1]
+        width, height = frame.width(), frame.height()
+        rows: list[tuple[int, int, int, int]] = []
+        for y in range(height):
+            left = 0
+            right = width - 1
+            try:
+                while left < width and frame.transparency_get(left, y):
+                    left += 1
+                while right >= left and frame.transparency_get(right, y):
+                    right -= 1
+            except tk.TclError:
+                left, right = 0, width - 1
+            if left <= right:
+                rows.append((left, y, right - left + 1, 1))
+        self._mask_cache[key] = (frame, tuple(rows))
+        return self._mask_cache[key][1]
+
+    def apply(self, window_id: int, frame: tk.PhotoImage, x: int, y: int,
+              extra_rectangles: list[tuple[int, int, int, int]]) -> None:
+        if not self.xdisplay or not window_id:
+            return
+        signature = (frame, tuple(extra_rectangles))
+        if signature == self._last_applied:
+            return
+        rectangles = [
+            (x + left, y + top, width, height)
+            for left, top, width, height in self._frame_mask(frame)
+        ]
+        rectangles.extend(extra_rectangles)
+        if not rectangles:
+            return
+        native = (self.Rectangle * len(rectangles))(
+            *(self.Rectangle(px, py, width, height) for px, py, width, height in rectangles)
+        )
+        # ShapeBounding = 0, ShapeSet = 0, Unsorted = 0.
+        self.xext.XShapeCombineRectangles(
+            self.xdisplay, window_id, 0, 0, 0, native, len(rectangles), 0, 0,
+        )
+        self.x11.XFlush(self.xdisplay)
+        self._last_applied = signature
+
+    def close(self) -> None:
+        if self.xdisplay:
+            self.x11.XCloseDisplay(self.xdisplay)
+            self.xdisplay = None
 
 
 class AnimatedAsset:
@@ -154,12 +238,19 @@ class DesktopWindow:
         opacity: float = 1.0,
         show_messages: bool = True,
         pack_name: str | None = None,
+        allow_dock_games: bool = False,
         theme: Theme | None = None,
     ):
         self.runtime = runtime
         self.name = name
         self.opacity = max(0.35, min(1.0, float(opacity)))
         self.show_messages = show_messages
+        self.allow_dock_games = allow_dock_games
+        self._dock_running = False
+        self._dock_after_id: str | None = None
+        self._dock_x = 0
+        self._dock_direction = 1
+        self._active_animation_action: str | None = None
         self.theme = theme or get_theme("dark")
         self.reminders = ReminderStore(runtime.root / "reminders.json")
         self.scheduler = LocalScheduler(self.reminders, runtime.inbox)
@@ -167,6 +258,12 @@ class DesktopWindow:
         self._last_glow_state: str | None = None
 
         self.root = tk.Tk()
+        self._x11_shape: _X11Shape | None = None
+        if platform_name() == "linux":
+            try:
+                self._x11_shape = _X11Shape()
+            except (OSError, AttributeError):
+                self._x11_shape = None
         self.root.title(name)
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", topmost)
@@ -210,6 +307,9 @@ class DesktopWindow:
             highlightthickness=0,
         )
         self.glow_canvas.pack()
+        if self._x11_shape:
+            # The neon color-key glow is useful on Windows but would be opaque on X11.
+            self.glow_canvas.pack_forget()
         self.image_label.pack()
 
         self._scale = 1.0
@@ -235,6 +335,8 @@ class DesktopWindow:
             pady=self.theme.spacing.xs,
         )
         self.messages_var = tk.BooleanVar(value=show_messages)
+        self.dock_games_var = tk.BooleanVar(value=allow_dock_games)
+        self.dock_running_var = tk.BooleanVar(value=False)
         self.context_menu = self._build_context_menu()
         self._drag_origin: tuple[int, int] | None = None
         self._dragged = False
@@ -269,6 +371,16 @@ class DesktopWindow:
         menu.add_cascade(label="Companion  \u25b6  Theme", menu=theme_menu)
 
         menu.add_checkbutton(label="Show messages", variable=self.messages_var, command=self.toggle_messages)
+        menu.add_checkbutton(
+            label="Allow scripted Dock play (fixed strip)",
+            variable=self.dock_games_var,
+            command=self.toggle_dock_games,
+        )
+        menu.add_checkbutton(
+            label="Run along preset bottom strip",
+            variable=self.dock_running_var,
+            command=self.toggle_dock_run,
+        )
         menu.add_separator()
 
         # ── Window section ───────────────────────────────────────────────
@@ -297,7 +409,85 @@ class DesktopWindow:
         return menu
 
     def close(self) -> None:
+        self._stop_dock_run()
+        if self._x11_shape:
+            self._x11_shape.close()
         self.root.destroy()
+
+    def toggle_dock_games(self) -> bool:
+        self.allow_dock_games = self.dock_games_var.get()
+        if not self.allow_dock_games:
+            self._stop_dock_run()
+        return self.allow_dock_games
+
+    def toggle_dock_run(self) -> bool:
+        if self._dock_running:
+            self._stop_dock_run()
+            return False
+        if not self.allow_dock_games:
+            self.dock_running_var.set(False)
+            self._show_control_error("Enable scripted Dock play in the menu first")
+            return False
+        if not self.pack or not {"running-right", "running-left"}.issubset(self.pack.animations):
+            self.dock_running_var.set(False)
+            self._show_control_error("This appearance has no running animations")
+            return False
+        self._show_control_error("")
+        self._dock_running = True
+        self.dock_running_var.set(True)
+        self._dock_direction = 1
+        self._dock_x = 12
+        self._set_dock_animation()
+        self._advance_dock_run()
+        return True
+
+    def _set_dock_animation(self) -> None:
+        action = "running-right" if self._dock_direction > 0 else "running-left"
+        if not self.pack:
+            return
+        path = self.pack.animation_for(state="idle", action=action)
+        self._active_animation_action = action
+        if path == self.image_path:
+            return
+        try:
+            self.image = AnimatedAsset(path)
+            self.image_path = path
+            self._render_current_frame()
+        except (OSError, ValueError, tk.TclError):
+            self._show_control_error(f"Could not load animation: {path.name}")
+            self._stop_dock_run()
+
+    def _stop_dock_run(self) -> None:
+        self._dock_running = False
+        self.dock_running_var.set(False)
+        if self._dock_after_id is not None:
+            try:
+                self.root.after_cancel(self._dock_after_id)
+            except tk.TclError:
+                pass
+            self._dock_after_id = None
+        self._active_animation_action = None
+
+    def _advance_dock_run(self) -> None:
+        if not self._dock_running:
+            return
+        width = self.root.winfo_reqwidth()
+        height = self.root.winfo_reqheight()
+        strip_left = 12
+        strip_right = max(strip_left, self.root.winfo_screenwidth() - width - 12)
+        # Companion uses a fixed bottom-edge band and never queries Dock/taskbar geometry.
+        y = max(0, self.root.winfo_screenheight() - height - 24)
+        self._dock_x += self._dock_direction * 4
+        if self._dock_x >= strip_right:
+            self._dock_x = strip_right
+            self._dock_direction = -1
+            self._set_dock_animation()
+        elif self._dock_x <= strip_left:
+            self._dock_x = strip_left
+            self._dock_direction = 1
+            self._set_dock_animation()
+        self.root.geometry(f"+{self._dock_x}+{y}")
+        self._dock_after_id = self.root.after(16, self._advance_dock_run)
 
     def _escape(self, _event: tk.Event) -> str:
         if self._menu_open:
@@ -421,6 +611,7 @@ class DesktopWindow:
             self._show_control_error(str(exc))
             return False
         self.pack = pack
+        self.context_menu = self._build_context_menu()
         self.image_path = image_path
         self.image = image
         self._show_control_error("")
@@ -438,10 +629,12 @@ class DesktopWindow:
             self._show_control_error(str(exc))
             return False
         self.pack, self.pack_name, self.image_path, self.image = pack, pack.name, image_path, image
+        self.context_menu = self._build_context_menu()
         self._show_control_error("")
         return True
 
     def _drag_start(self, event: tk.Event) -> None:
+        self._stop_dock_run()
         self._drag_origin = (event.x_root - self.root.winfo_x(), event.y_root - self.root.winfo_y())
         self._dragged = True
         self._publish_events(("move", "free"))
@@ -475,6 +668,8 @@ class DesktopWindow:
 
     def _draw_glow(self, state_name: str) -> None:
         """Draw a soft glow circle behind the companion sprite."""
+        if self._x11_shape:
+            return
         if self._last_glow_state == state_name:
             return
         self._last_glow_state = state_name
@@ -508,9 +703,17 @@ class DesktopWindow:
         self.runtime.process_once()
         state = self.runtime.state
         t = self.theme
+        if self._dock_running and not state["visible"]:
+            self._stop_dock_run()
 
         # Update image asset if state changed
-        next_image_path = self.pack.animation_for(state=state["state"], mood=state.get("mood")) if self.pack else self.image_path
+        next_image_path = (
+            self.pack.animation_for(state="idle", action=self._active_animation_action)
+            if self.pack and self._active_animation_action
+            else self.pack.animation_for(state=state["state"], mood=state.get("mood"))
+            if self.pack
+            else self.image_path
+        )
         if next_image_path is not None and next_image_path != self.image_path and next_image_path.exists():
             self.image_path = next_image_path
             try:
@@ -538,7 +741,7 @@ class DesktopWindow:
         self._draw_glow(state["state"])
 
         self.root.withdraw() if not state["visible"] else self.root.deiconify()
-        if not self._dragged:
+        if not self._dragged and not self._dock_running:
             self._place(state["position"])
 
         # Message bubble
@@ -550,7 +753,24 @@ class DesktopWindow:
         elif self.bubble.winfo_ismapped():
             self.bubble.pack_forget()
 
-        self.root.after(t.motion.poll_ms, self._refresh)
+        if self._x11_shape and self.image and self.root.winfo_ismapped():
+            extra_rectangles = []
+            for widget in (self.bubble, self.control_error):
+                if widget.winfo_ismapped():
+                    extra_rectangles.append((
+                        widget.winfo_x(), widget.winfo_y(),
+                        widget.winfo_width(), widget.winfo_height(),
+                    ))
+            try:
+                self._x11_shape.apply(
+                    self.root.winfo_id(), self.image.current,
+                    self.image_label.winfo_x(), self.image_label.winfo_y(),
+                    extra_rectangles,
+                )
+            except (OSError, tk.TclError):
+                pass
+
+        self.root.after(16 if self._dock_running else t.motion.poll_ms, self._refresh)
 
     def show(self) -> None:
         self.root.mainloop()
@@ -572,8 +792,20 @@ def launch(
     opacity: float = 1.0,
     show_messages: bool = True,
     pack_name: str | None = None,
+    allow_dock_games: bool = False,
     theme: Theme | None = None,
 ) -> None:
+    if platform_name() == "linux" and pack is not None and pack.sprite_sheet:
+        from .gtk_sprite_window import launch_sprite_window
+
+        launch_sprite_window(
+            runtime,
+            pack,
+            name=name,
+            topmost=topmost,
+            allow_dock_games=allow_dock_games,
+        )
+        return
     DesktopWindow(
         runtime,
         asset=asset,
@@ -583,6 +815,7 @@ def launch(
         opacity=opacity,
         show_messages=show_messages,
         pack_name=pack_name,
+        allow_dock_games=allow_dock_games,
         theme=theme,
     ).show()
 

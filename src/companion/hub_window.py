@@ -103,6 +103,8 @@ class HubWindow:
             info = entry.name
             if entry.pack_name:
                 info += f"  ({entry.pack_name})"
+            if entry.dock_play_allowed:
+                info += "  [Dock play allowed]"
             info += f"  [{entry.status}]"
             tk.Label(
                 row, text=info, bg=t.bg_menu, fg=t.fg_primary,
@@ -169,7 +171,7 @@ class HubWindow:
         t = self.theme
         dialog = tk.Toplevel(self.root)
         dialog.title("New Companion")
-        dialog.geometry("340x160")
+        dialog.geometry("430x280")
         dialog.resizable(False, False)
         dialog.configure(bg=t.bg_menu)
         dialog.attributes("-topmost", True)
@@ -177,19 +179,58 @@ class HubWindow:
         frame = tk.Frame(dialog, bg=t.bg_menu, padx=16, pady=12)
         frame.pack(fill="both", expand=True)
 
+        packs = self.store.discover_packs()
+        pack_choices = {f"{pack.name} ({pack.pack_id})": pack for pack in packs}
+        default_pack = next((pack for pack in packs if pack.pack_id == "malbolge-cat"), None)
+
         tk.Label(
             frame, text="Name:", bg=t.bg_menu, fg=t.fg_primary,
             font=(t.typography.font_family, t.typography.size_body),
         ).grid(row=0, column=0, sticky="w", pady=4)
-        name_var = tk.StringVar(value="Companion")
+        name_var = tk.StringVar(value=default_pack.name if default_pack else "Companion")
         name_entry = tk.Entry(frame, textvariable=name_var, width=24,
                               bg=t.bg_bubble, fg=t.fg_primary,
                               insertbackground=t.fg_primary)
         name_entry.grid(row=0, column=1, pady=4, padx=(8, 0))
 
+        no_pack_label = "Default appearance"
+        choices = list(pack_choices) or [no_pack_label]
+        selected_pack = tk.StringVar(
+            value=next((label for label, pack in pack_choices.items() if pack is default_pack), choices[0])
+        )
+        tk.Label(
+            frame, text="Appearance:", bg=t.bg_menu, fg=t.fg_primary,
+            font=(t.typography.font_family, t.typography.size_body),
+        ).grid(row=1, column=0, sticky="w", pady=4)
+        tk.OptionMenu(frame, selected_pack, *choices).grid(row=1, column=1, sticky="ew", pady=4, padx=(8, 0))
+        frame.grid_columnconfigure(1, weight=1)
+        dock_play_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            frame,
+            text="Allow this pet to run along Companion's preset bottom strip",
+            variable=dock_play_var,
+            bg=t.bg_menu,
+            fg=t.fg_primary,
+            activebackground=t.bg_menu,
+            activeforeground=t.fg_primary,
+            selectcolor=t.bg_bubble,
+            wraplength=380,
+            justify="left",
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(10, 2))
+        tk.Label(
+            frame,
+            text="Uses fixed screen-edge coordinates; Companion does not inspect the system Dock or taskbar.",
+            bg=t.bg_menu,
+            fg=t.fg_secondary,
+            wraplength=380,
+            justify="left",
+            font=(t.typography.font_family, t.typography.size_name),
+        ).grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 4))
+
         def create():
             name = name_var.get().strip() or "Companion"
-            self.store.create_companion(name)
+            pack = pack_choices.get(selected_pack.get())
+            self.store.create_companion(name, pack=pack, dock_play_allowed=dock_play_var.get())
             self.state = self.store.load()
             self._refresh_list()
             dialog.destroy()
@@ -197,7 +238,7 @@ class HubWindow:
         tk.Button(
             frame, text="Create", bg=t.fg_accent, fg="#000000",
             command=create, relief="flat", padx=12, pady=4,
-        ).grid(row=1, column=0, columnspan=2, pady=10)
+        ).grid(row=4, column=0, columnspan=2, pady=10)
 
         name_entry.focus_set()
         dialog.bind("<Return>", lambda _: create())

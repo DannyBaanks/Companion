@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-agent-companion"
-version = "1.0.0"
+version = "1.1.0"
 description = "Open Agent Companion: local desktop companion for agents and CLIs"
 readme = "README.md"
 license = { text = "MIT" }
@@ -14,10 +14,11 @@ requires-python = ">=3.11"
 companion = "companion.cli:main"
 
 [project.optional-dependencies]
-test = ["pytest>=8"]
+test = ["pytest>=8", "Pillow>=10"]
 websocket = ["websockets>=12"]
 notify = ["plyer>=2"]
 build = ["pyinstaller>=6"]
+art = ["Pillow>=10"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
